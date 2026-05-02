@@ -1,17 +1,44 @@
 # AGENTS.md
 
-- `AGENTS.md` is the map for every agent and show how to behave and work as a agent.
+This is the first file agents read. Keep this repo simple, sufficient, and
+necessary.
 
-## Behavior rules
-- Agents must have necessary and sufficient context to perform your tasks.
-- Agents should not read every docs. You should search infomation when you think it necessary.
-- Agents should understand the scope of your task before start it.
-- Agents must think before start tasks to implement and modify changes in a way that minimizes the scope of impact.
+## Read Order
 
-## Map And Architecture Index
+Routine agents read only these active docs:
 
+1. `docs/01-agent-operating-contract.md`
+2. `docs/02-output-verification-contract.md`
+3. `docs/03-repo-boundary-and-storage-contract.md`
 
-## Root Boundary
+Open `docs/reference/` only when the task needs detail.
 
-Keep this file short. It should describe routing, active maps, and parent /
-subagent responsibility. Do not add skill-specific procedure here.
+## Reference Map
+1. `docs/reference/agent-runtime-and-scope-reference.md`
+2. `docs/reference/packet-evidence-and-rework-reference.md`
+3. `docs/reference/repo-boundary-and-storage-reference.md`
+4. `docs/reference/verification-ci-and-pr-reference.md`
+5. `docs/reference/legacy-source-and-archive-map.md`
+
+## Behavior
+
+- Read named source refs first; do not read the whole repo by default.
+- Understand task intent, expected output, write target, and verification before
+  editing.
+- Keep changes small and local.
+- Do not invent missing facts, paths, state, roles, or requirements.
+- If required context is missing or verification fails, return rework instead of
+  guessing.
+- You should understand the structure of this repo.
+- Archive old or superseded files after useful content is summarized.
+
+## Folder Map
+
+- `app/`: future runnable app surfaces only.
+- `src/`: future shared implementation code only.
+- `docs/`: active docs and compact references.
+- `docs/reference/`: detailed reference summaries.
+- `artifact/`: foundation repo outputs or fixtures, not project logs.
+- `archive/`: summarized old or superseded material.
+- `templates/`: reusable templates.
+- `Plan/`: planning and shared logs.
