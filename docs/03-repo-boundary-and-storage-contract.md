@@ -14,6 +14,7 @@ current material lives in `docs/reference/`.
 - `templates/`: reusable templates only.
 - `tests/`: foundation contract and integrity checks only.
 - `.agents/skills/`: current repo-local Codex skills.
+- `.codex/skills/`: preserved existing Codex skills; consult before changing.
 - `.agents/plugins/marketplace.json`: Codex plugin registry.
 - `plugins/`: local plugin bundles and downloaded plugin payloads.
 - `.github/workflows/ci.yml`: CI entrypoint for required checks.

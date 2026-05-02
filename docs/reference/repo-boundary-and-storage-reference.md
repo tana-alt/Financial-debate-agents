@@ -23,6 +23,7 @@ Use the current folder map and store truth locally.
 - `tests/`: foundation contract and integrity checks for active docs, references,
   templates, and deployment-readiness guards.
 - `.agents/skills/`: current repo-local Codex skills.
+- `.codex/skills/`: preserved existing Codex skills.
 - `.agents/plugins/marketplace.json`: local Codex plugin marketplace registry.
 - `plugins/`: local plugin bundles and downloaded plugin payloads.
 - `.github/workflows/ci.yml`: CI entrypoint for required checks.

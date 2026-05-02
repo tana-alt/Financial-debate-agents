@@ -47,6 +47,7 @@ Open `docs/reference/` only when the task needs detail.
 - `templates/`: reusable templates.
 - `tests/`: foundation contract and integrity checks.
 - `.agents/skills/`: current repo-local Codex skills.
+- `.codex/skills/`: preserved existing Codex skills; consult before changing.
 - `.agents/plugins/marketplace.json`: local Codex plugin registry.
 - `plugins/`: local plugin bundles and downloaded plugin payloads.
 - `.github/workflows/ci.yml`: CI entrypoint for required checks.

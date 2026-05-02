@@ -37,5 +37,6 @@ CI runs the same required checks through `.github/workflows/ci.yml`.
 - `templates/`: reusable templates.
 - `tests/`: foundation contract and integrity checks.
 - `.agents/skills/`: current repo-local Codex skills.
+- `.codex/skills/`: preserved existing Codex skills.
 - `.agents/plugins/marketplace.json` and `plugins/`: local plugin registry and
   payloads.

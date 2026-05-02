@@ -76,7 +76,6 @@ def test_required_contract_files_exist() -> None:
 
 def test_removed_runtime_surfaces_are_not_current_roots() -> None:
     inactive_roots = (
-        ".codex/skills",
         ".claude",
         "packets",
         "project-orchestration",
@@ -94,12 +93,12 @@ def test_removed_runtime_surfaces_are_not_current_roots() -> None:
     assert ".serena/" in gitignore
 
 
-def test_skill_root_is_agents_only() -> None:
+def test_skill_roots_are_explicit() -> None:
     skill_root = repo_path(".agents/skills")
     live_skills = sorted(path for path in skill_root.iterdir() if path.is_dir())
 
     assert live_skills
-    assert not repo_path(".codex/skills").exists()
+    assert repo_path(".codex/skills").is_dir()
 
     for skill_path in live_skills:
         assert (skill_path / "SKILL.md").is_file(), skill_path
