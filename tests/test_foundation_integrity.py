@@ -83,7 +83,7 @@ def test_required_contract_files_exist() -> None:
 
 def test_legacy_runtime_surfaces_are_archive_only() -> None:
     inactive_roots = (
-        ".agents",
+        ".agents/skills",
         ".claude",
         "packets",
         "project-orchestration",
@@ -100,6 +100,8 @@ def test_legacy_runtime_surfaces_are_archive_only() -> None:
 
     for relative_path in inactive_roots:
         assert not repo_path(relative_path).exists(), relative_path
+
+    assert repo_path(".agents/plugins/marketplace.json").is_file()
 
     for relative_path in archive_roots:
         assert repo_path(relative_path).is_dir(), relative_path

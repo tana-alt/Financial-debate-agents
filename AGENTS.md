@@ -3,6 +3,11 @@
 This is the first file agents read. Keep this repo simple, sufficient, and
 necessary.
 
+## Mindset
+- Keep it simple. Don't create anything you can't explain the reasoning behind.
+- Don't rely solely on inference. Build your results on observation and facts.
+- Make plan and set success criteria and constraints before creating deliverables.
+
 ## Read Order
 
 Routine agents read only these active docs:
@@ -41,4 +46,6 @@ Open `docs/reference/` only when the task needs detail.
 - `artifact/`: foundation repo outputs or fixtures, not project logs.
 - `archive/`: summarized old or superseded material.
 - `templates/`: reusable templates.
+- `.agents/plugins/marketplace.json`: local Codex plugin registry only.
+- `plugins/`: local plugin bundles and downloaded plugin payloads.
 - `Plan/`: planning and shared logs.

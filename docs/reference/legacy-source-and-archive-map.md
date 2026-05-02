@@ -83,7 +83,8 @@ exists. It is a source-coverage map, not a new operating contract.
 - Old Obsidian, SNS, LangGraph, and repo-profile export references are
   provenance unless a current task explicitly names that surface.
 - Old `.agents/skills` and `.claude/skills` mirrors are archived. Current
-  generic skills live under `.codex/skills` only.
+  generic skills live under `.codex/skills` only. The allowed `.agents` surface
+  is `.agents/plugins/marketplace.json` for local Codex plugin registration.
 
 ## Archive Rule
 

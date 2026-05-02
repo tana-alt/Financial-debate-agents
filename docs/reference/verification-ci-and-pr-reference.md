@@ -53,6 +53,8 @@ The current Foundation repo has a small root test surface:
 - `uv.lock`: frozen dependency lock for clone-and-test behavior.
 - `Makefile`: local check commands.
 - `.github/workflows/ci.yml`: CI entrypoint.
+- `.agents/plugins/marketplace.json` and `plugins/`: local Codex plugin registry
+  and plugin payloads.
 - `tests/test_foundation_integrity.py`: repo structure and doc contract checks.
 - `tests/test_contract_models.py`: Pydantic validation for YAML templates and
   archived packet examples.
@@ -65,7 +67,8 @@ target project boundary.
 ## Current Commands
 
 - `uv sync --frozen --group dev`: install locked test dependencies.
-- `make lint`: run `ruff`.
+- `make lint`: run `ruff`; archived and plugin payload roots are excluded from
+  the foundation lint scope.
 - `make typecheck`: run `mypy` with the Pydantic plugin enabled.
 - `make test`: run `pytest`.
 - `make check-contracts`: run Pydantic contract validation tests directly.

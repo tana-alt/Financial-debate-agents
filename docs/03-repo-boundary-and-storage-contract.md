@@ -14,9 +14,13 @@ or historical material lives in `docs/reference/`, `archive/source-docs/`, or
 - `artifact/`: foundation repo outputs, fixtures, or generated records.
 - `templates/`: reusable templates only.
 - `archive/`: summarized old material.
+- `.agents/plugins/marketplace.json`: Codex plugin registry only.
+- `plugins/`: local plugin bundles and downloaded plugin payloads.
 
 Do not treat legacy `apps/`, `artifacts/`, `projects/`, or `tests/` references
 as current roots unless those folders are deliberately introduced.
+
+Do not restore legacy `.agents` surfaces except the plugin marketplace registry.
 
 ## Storage And Overlays
 

@@ -22,6 +22,11 @@ package = false
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = [
+    ".codex/skills",
+    "archive",
+    "plugins",
+]
 
 [tool.ruff.lint]
 select = [
