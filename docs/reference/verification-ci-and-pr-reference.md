@@ -53,12 +53,9 @@ The current Foundation repo has a small root test surface:
   readiness guard.
 - `.agents/plugins/marketplace.json` and `plugins/`: local plugin registry and
   plugin payloads.
-- `tests/test_foundation_integrity.py`: repo structure and doc contract checks.
-- `tests/test_contract_models.py`: Pydantic validation for YAML templates.
-- `tests/test_clean_checkout_reproducibility.py`: required tracked-file checks
-  for clone-and-test reliability.
-- `tests/test_extension_surface_integrity.py`: structural skill and plugin
-  metadata/path checks.
+- `tests/test_*.py`: aggregate pytest surface. New tests placed under this
+  pattern are collected by `make test` and are required tracked paths for
+  clean-checkout reproducibility.
 
 The repo does not currently have active app code, product tests, deployment
 config, or a release target.
@@ -72,7 +69,9 @@ include:
 - `make lint`: run `ruff`; plugin payload roots are excluded from foundation
   lint scope.
 - `make typecheck`: run `mypy` with the Pydantic plugin enabled.
-- `make test`: run `pytest`.
+- `make test`: aggregate gate; run `pytest` against configured pytest
+  collection. `pyproject.toml` sets `testpaths = ["tests"]`, so new
+  `tests/test_*.py` files enter the main gate directly.
 - `make check-toolchain`: report local toolchain versions used by the foundation
   gate.
 - `make doctor`: inspect local Git, hook, Python, and tool setup, including
@@ -93,6 +92,11 @@ include:
 - `make check-required`: run the local required chain.
 - `make check-foundation`: run the Foundation Robustness Gate by combining
   `make check-toolchain`, `make check-required`, and `make check-cd`.
+
+`make check-contracts`, `make check-doc-consistency`, and `make check-cd` are
+targeted shortcuts for local focus. They do not define the complete test surface
+and do not replace `make test`, `make check-required`, or
+`make check-foundation`.
 
 For docs-only edits, at minimum inspect the changed docs and run the smallest
 available contract or required check if the repo checkout and tools are
