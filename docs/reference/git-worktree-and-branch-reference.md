@@ -48,12 +48,6 @@ requires the branch `work_id` to include that project ID. In enforced parallel
 worktree mode, the local worktree path must include it too. Placeholder
 ownership such as `agent/none/none/none` is invalid.
 
-Cross-project work uses `FOUNDATION_PROJECT_SCOPE=multi` with
-`FOUNDATION_ALLOWED_PROJECT_IDS` and `FOUNDATION_PROJECT_SCOPE_REASON`. A single
-local `multi` worktree may be reused across cross-project branches; each branch
-must use an `agent/multi.../<lane>/<slug>` work ID and declare its allowed
-project IDs before editing.
-
 If the scope provides `work_id`, `lane`, and a short task slug, derive:
 
 ```text

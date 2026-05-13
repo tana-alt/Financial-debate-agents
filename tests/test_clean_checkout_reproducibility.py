@@ -30,7 +30,6 @@ STATIC_REQUIRED_PATHS = (
     "pyproject.toml",
     "scripts/check-agent-worktree-policy.sh",
     "scripts/check-dev-environment.sh",
-    "scripts/check-project-scoped-changes.sh",
     "scripts/check-repo-hygiene.sh",
     "scripts/check-secrets.sh",
     "scripts/check-shell-static-analysis.sh",
@@ -78,6 +77,7 @@ def dynamic_required_paths() -> list[str]:
         path.relative_to(ROOT).as_posix()
         for path in sorted((ROOT / ".agents" / "skills").glob("*/SKILL.md"))
     )
+    paths.extend(pytest_test_paths())
     paths.extend(
         path.relative_to(ROOT).as_posix()
         for path in sorted((ROOT / "plugins").glob("*/.codex-plugin/plugin.json"))
@@ -95,6 +95,14 @@ def dynamic_required_paths() -> list[str]:
     paths.append(".agents/plugins/marketplace.json")
     paths.append(".agents/skills/SKILL_INDEX.md")
     return paths
+
+
+def pytest_test_paths() -> list[str]:
+    return [
+        path.relative_to(ROOT).as_posix()
+        for path in sorted((ROOT / "tests").glob("test_*.py"))
+        if path.is_file()
+    ]
 
 
 def manifest_referenced_plugin_asset_paths() -> list[str]:
@@ -127,3 +135,11 @@ def test_required_foundation_files_are_tracked_for_clean_checkout() -> None:
     missing = [path for path in required if path not in tracked]
 
     assert not missing, "required clean-checkout files are not tracked:\n" + "\n".join(missing)
+
+
+def test_pytest_test_files_are_clean_checkout_required_paths() -> None:
+    test_files = set(pytest_test_paths())
+    required = set(dynamic_required_paths())
+
+    assert test_files
+    assert test_files <= required
