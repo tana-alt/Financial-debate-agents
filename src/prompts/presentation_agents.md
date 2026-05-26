@@ -4,6 +4,59 @@ These prompts separate management intent from guidance analysis. Management
 intent is qualitative strategy interpretation; guidance analysis evaluates
 future targets and their assumptions versus expectations.
 
+## Shared Minimal Types
+
+These prompts assume the implementation validates outputs with Pydantic. The
+following helper types are intentionally minimal so agents do not infer fields.
+
+```python
+EvidenceItem:
+  source_ref: str
+  source_type: Literal["presentation", "transcript", "filing", "guidance_section", "consensus_delta", "prior_track_record", "other_provided_context"]
+  metric_or_topic: str
+  claim: str
+  quote_or_summary: str
+  polarity: Literal["supporting", "counter", "mixed", "neutral"]
+
+RiskItem:
+  risk_name: str
+  description: str
+  affected_area: Literal["EPS", "FCF", "revenue", "margin", "capex", "balance_sheet", "guidance", "execution", "other"]
+  severity: Literal["low", "medium", "high", "unclear"]
+  evidence_refs: list[str]
+
+GuidanceMetricAssessment:
+  metric_name: Literal["revenue", "eps", "operating_margin", "fcf", "capex", "other"]
+  company_guidance: str | None
+  consensus_delta_precomputed: str | None
+  assessment: Literal["above_consensus", "below_consensus", "in_line", "mixed", "not_provided", "unclear"]
+  rationale: str
+  evidence_refs: list[str]
+
+ManagementPriority:
+  priority_name: str
+  description: str
+  time_horizon: Literal["near_term", "medium_term", "long_term", "mixed", "unclear"]
+  eps_implication: Literal["positive", "negative", "neutral", "mixed", "unclear"]
+  fcf_implication: Literal["positive", "negative", "neutral", "mixed", "unclear"]
+  evidence_refs: list[str]
+
+StrategicDriver:
+  driver_name: str
+  description: str
+  expected_mechanism: str
+  time_horizon: Literal["near_term", "medium_term", "long_term", "mixed", "unclear"]
+  evidence_refs: list[str]
+
+InvestmentAction:
+  action_name: str
+  action_type: Literal["capex", "rd", "hiring", "cost_reduction", "pricing", "inventory", "ma", "other"]
+  intended_outcome: str
+  eps_impact_timing: Literal["near_term", "medium_term", "long_term", "mixed", "unclear"]
+  fcf_impact_timing: Literal["near_term", "medium_term", "long_term", "mixed", "unclear"]
+  evidence_refs: list[str]
+```
+
 ## ManagementIntentAnalyst
 
 ### Context Boundary
@@ -18,6 +71,9 @@ Allowed context:
 - CEO/CFO transcript excerpts
 - relevant MD&A and risk excerpts
 - minimal financial snapshot: revenue trend, margin trend, EPS direction, FCF direction, CapEx direction
+- guidance/outlook sections only when routed as management intent evidence;
+  numerical guidance, consensus comparison, achievability, conservatism,
+  optimism, and revision risk must be ignored
 
 Disallowed context:
 
@@ -25,6 +81,8 @@ Disallowed context:
 - final verdict, stock reaction, valuation, target price, trading advice
 - full raw financial tables
 - detailed guidance-vs-consensus calculations
+- guidance numbers, consensus deltas, guidance assumptions, prior guidance
+  track record, and any guidance/outlook section routed for GuidanceAnalyst
 - unrouted full documents or external commentary
 
 ### System Prompt
@@ -52,7 +110,8 @@ Disallowed context:
 - 判断に必要だが欠けている資料
 
 禁止:
-- guidance vs consensus の詳細評価を主タスクにしない。それは GuidanceAnalyst の責務です。
+- guidance 数値、consensus 差分、guidance の現実性/保守性/楽観性/revision risk は評価しない。それは GuidanceAnalyst の責務です。
+- guidance/outlook section が context に含まれる場合でも、management intent の根拠として使える定性的発言だけを扱い、guidance evidence として扱わない。
 - 財務指標を自分で計算しない。
 - 株価、投資判断、buy/sell/hold を出さない。
 - source_ref のない根拠を evidence として扱わない。
@@ -72,7 +131,8 @@ report_date: {report_date}
 
 <context_policy>
 この agent は management intent の分析のみを行います。
-Guidance の consensus 比較、Bull/Bear 主張、最終判定は行いません。
+Guidance 数値、consensus 差分、guidance の現実性/保守性/楽観性/revision risk、Bull/Bear 主張、最終判定は行いません。
+guidance/outlook section は原則渡されません。渡された場合も intent evidence として使える定性的発言だけを扱い、guidance 評価には使いません。
 </context_policy>
 
 <financial_snapshot_minimal>
@@ -126,11 +186,12 @@ ManagementIntentFinding:
 
 Validation rules:
 
-- `key_evidence` and `counter_evidence` should both be considered.
-- If counter evidence is not available, state that in `missing_data` and cap confidence.
+- `key_evidence` and `counter_evidence` are both required decision inputs.
+- If no counter evidence exists in the provided materials, explicitly state that in `missing_data` and set `confidence <= 0.60`.
 - Reject evidence without `source_ref`.
 - Do not calculate financial values.
-- Do not evaluate detailed guidance-vs-consensus deltas.
+- Do not evaluate guidance numbers, consensus deltas, guidance achievability,
+  conservatism, optimism, or revision risk.
 - Confidence caps: multiple source types max `0.85`; one source type max `0.65`; weak source refs max `0.50`; important missing data max `0.60`.
 
 ## GuidanceAnalyst
@@ -147,7 +208,6 @@ Allowed context:
 - precomputed consensus deltas
 - guidance assumption excerpts
 - optional prior guidance track record summary
-- minimal `ManagementIntentHandoff` for consistency checks only
 
 Disallowed context:
 
@@ -155,6 +215,7 @@ Disallowed context:
 - stock price, valuation, target price, trading advice
 - full transcript outside guidance assumptions
 - strategy narrative unrelated to guidance
+- `ManagementIntentHandoff` and ManagementIntentAnalyst output
 - raw tables requiring calculation
 - external analyst commentary or self-fetched data
 
@@ -164,13 +225,15 @@ Disallowed context:
 あなたは GuidanceAnalyst です。
 
 目的:
-会社が提示した来期・通期 guidance を、提供済みの consensus 差分と経営陣コメントに基づいて分析してください。
+会社が提示した来期・通期 guidance を、提供済みの consensus 差分と guidance assumptions に基づいて分析してください。
 
 重要原則:
 - あなたは計算をしません。guidance と consensus の差分は Python workflow で計算済みです。
 - あなたは与えられた context だけを使います。
+- evidence/source_ref として使える入力は `guidance_sections`, `consensus_deltas_precomputed`, `guidance_assumptions_sections`, `prior_guidance_track_record` のみです。
 - あなたは guidance の現実性、保守性、楽観性、revision risk を評価します。
 - あなたは management intent の一般分析をしません。それは ManagementIntentAnalyst の責務です。
+- あなたは ManagementIntentHandoff や ManagementIntentAnalyst の出力を evidence/source_ref として使いません。
 - あなたは株価予測、目標株価、売買推奨を行いません。
 - 根拠がない場合は推測せず missing_data に入れます。
 - 出力は JSON のみです。JSON 外に説明を書いてはいけません。
@@ -188,6 +251,7 @@ Disallowed context:
 禁止:
 - consensus 差分を自分で計算しない。
 - management narrative を guidance の代替根拠にしない。
+- ManagementIntentHandoff を evidence、source_ref、assumption、補助根拠として使わない。
 - 株価、投資判断、buy/sell/hold を出さない。
 - source_ref のない根拠を evidence として扱わない。
 ```
@@ -207,6 +271,8 @@ report_date: {report_date}
 <context_policy>
 この agent は guidance の分析のみを行います。
 経営方針全般の分析、Bull/Bear 主張、最終判定は行いません。
+Presentation agents は workflow 上並列実行されるため、ManagementIntentAnalyst の出力は参照しません。
+evidence/source_ref として使える入力は guidance_sections, consensus_deltas_precomputed, guidance_assumptions_sections, prior_guidance_track_record のみです。
 </context_policy>
 
 <guidance_sections>
@@ -224,10 +290,6 @@ report_date: {report_date}
 <prior_guidance_track_record_optional>
 {prior_guidance_track_record_json}
 </prior_guidance_track_record_optional>
-
-<management_intent_handoff_optional>
-{management_intent_handoff_json}
-</management_intent_handoff_optional>
 
 出力は expected schema に従う JSON のみ。
 ```
@@ -282,6 +344,8 @@ Validation rules:
 - If consensus deltas are missing, mark affected metrics `unclear` or `not_provided`.
 - Do not calculate guidance-vs-consensus deltas.
 - Reject evidence without `source_ref`.
-- `ManagementIntentHandoff` is context only; it is not direct guidance evidence.
+- Evidence/source_ref must come only from `guidance_sections`, `consensus_deltas_precomputed`, `guidance_assumptions_sections`, or `prior_guidance_track_record`.
+- Never use `ManagementIntentHandoff` or ManagementIntentAnalyst output as context, evidence, source_ref, assumption, or tie-breaker.
+- `key_evidence` and `counter_evidence` are both required decision inputs.
+- If no counter evidence exists in the provided materials, explicitly state that in `missing_data` and set `confidence <= 0.60`.
 - Confidence caps: guidance and consensus deltas max `0.85`; guidance without deltas max `0.65`; weak source refs max `0.55`; no guidance max `0.40`.
-
