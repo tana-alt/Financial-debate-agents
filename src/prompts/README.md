@@ -17,7 +17,9 @@ Design rules:
 
 Prompt groups:
 
-- `financial_agents.md`: `EPSQualityAnalyst`, `CashFlowFcfAnalyst`
+- `financial_agents.md`: `EPSQualityAnalyst`, `ProfitabilityAnalyst`, `CashFlowFcfAnalyst`, `BalanceSheetRiskAnalyst`
 - `presentation_agents.md`: `ManagementIntentAnalyst`, `GuidanceAnalyst`
 - `debate_judge_agents.md`: `BullAgent`, `BearAgent`, `JudgeAgent`
 
+The file count is not the agent count. These are grouped references for review
+consistency. At runtime, load only the section for the agent being invoked.
