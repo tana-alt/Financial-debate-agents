@@ -6,12 +6,13 @@ The workflow itself is fixed and explicit:
 Data ingestion/normalization -> financial agents -> presentation agents ->
 evidence aggregation -> debate agents -> judge -> Markdown renderer.
 """
+
 from __future__ import annotations
 
 import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
@@ -26,6 +27,7 @@ from .workflow_agents import (
     ManagementIntentAnalyst,
 )
 from .workflow_models import (
+    REQUIRED_FINDING_COVERAGE_KEYS,
     AgentResult,
     AgentRole,
     AgentTeam,
@@ -41,11 +43,9 @@ from .workflow_models import (
     ImpactArea,
     JudgeDecision,
     ManagementIntentFinding,
-    REQUIRED_FINDING_COVERAGE_KEYS,
     ReviewRequest,
     ReviewResponse,
     SourceRef,
-    SourceType,
     StepState,
     StepStatus,
     VerdictLabel,
@@ -55,6 +55,9 @@ from .workflow_models import (
 
 class WorkflowValidationError(ValueError):
     """Raised when a deterministic workflow gate fails."""
+
+
+ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
 INVESTMENT_ADVICE_PATTERNS = (
@@ -212,14 +215,16 @@ class ReviewWorkflow:
         markdown = self._record_step(
             steps,
             WorkflowStep.MARKDOWN_RENDERER,
-            lambda: self.renderer.render(
-                request=request,
-                brief=brief,
-                debate=debate,
-                decision=decision,
-            )
-            if request.include_markdown
-            else "Markdown rendering was disabled for this request.",
+            lambda: (
+                self.renderer.render(
+                    request=request,
+                    brief=brief,
+                    debate=debate,
+                    decision=decision,
+                )
+                if request.include_markdown
+                else "Markdown rendering was disabled for this request."
+            ),
         )
 
         return ReviewResponse(
@@ -293,7 +298,7 @@ class ReviewWorkflow:
         actual: float | None,
         consensus: float | None,
     ) -> float | None:
-        if actual is None or consensus in (None, 0):
+        if actual is None or consensus is None or consensus == 0:
             return None
         return ((actual - consensus) / abs(consensus)) * 100
 
@@ -354,7 +359,9 @@ class ReviewWorkflow:
             "cash_flow_risk_sections": by_topic["other"] + by_topic["risk"] + by_topic["guidance"],
             "risk_sections": by_topic["risk"],
             "management_sections": by_topic["guidance"] + by_topic["segments"],
-            "management_intent_sections": by_topic["guidance"] + by_topic["segments"] + by_topic["other"],
+            "management_intent_sections": by_topic["guidance"]
+            + by_topic["segments"]
+            + by_topic["other"],
             "strategy_sections": by_topic["segments"] + by_topic["other"],
             "mdna_sections": by_topic["other"],
             "guidance_sections": by_topic["guidance"],
@@ -367,7 +374,9 @@ class ReviewWorkflow:
         self,
         sections: list[DocumentSection],
     ) -> dict[str, list[dict[str, Any]]]:
-        grouped = {name: [] for name in ("eps", "revenue", "guidance", "segments", "risk", "other")}
+        grouped: dict[str, list[dict[str, Any]]] = {
+            name: [] for name in ("eps", "revenue", "guidance", "segments", "risk", "other")
+        }
         for section in sections:
             topic = self._infer_topic(section)
             grouped[topic].append(section.model_dump(mode="json"))
@@ -387,9 +396,13 @@ class ReviewWorkflow:
             return "revenue"
         return "other"
 
-    def _run_parallel(self, agent_classes: tuple[type, ...], context: dict[str, Any]) -> list[BaseModel]:
+    def _run_parallel(
+        self, agent_classes: tuple[type, ...], context: dict[str, Any]
+    ) -> list[BaseModel]:
         with ThreadPoolExecutor(max_workers=len(agent_classes)) as executor:
-            futures = [executor.submit(agent_class(self.llm).run, context) for agent_class in agent_classes]
+            futures = [
+                executor.submit(agent_class(self.llm).run, context) for agent_class in agent_classes
+            ]
             return [future.result() for future in futures]
 
     def _aggregate_evidence(
@@ -418,14 +431,22 @@ class ReviewWorkflow:
 
         positive = self._dedupe_evidence(
             [
-                *self._collect_evidence(financial_findings, "key_evidence", EvidencePolarity.POSITIVE),
-                *self._collect_evidence(presentation_findings, "key_evidence", EvidencePolarity.POSITIVE),
+                *self._collect_evidence(
+                    financial_findings, "key_evidence", EvidencePolarity.POSITIVE
+                ),
+                *self._collect_evidence(
+                    presentation_findings, "key_evidence", EvidencePolarity.POSITIVE
+                ),
             ]
         )
         negative = self._dedupe_evidence(
             [
-                *self._collect_evidence(financial_findings, "counter_evidence", EvidencePolarity.NEGATIVE),
-                *self._collect_evidence(presentation_findings, "counter_evidence", EvidencePolarity.NEGATIVE),
+                *self._collect_evidence(
+                    financial_findings, "counter_evidence", EvidencePolarity.NEGATIVE
+                ),
+                *self._collect_evidence(
+                    presentation_findings, "counter_evidence", EvidencePolarity.NEGATIVE
+                ),
             ]
         )
         risks = [item for item in negative if EvidencePolarity.NEGATIVE == item.polarity]
@@ -517,7 +538,8 @@ class ReviewWorkflow:
         debate = DebateResult(
             bull_case=(self._text_attr(bull_case, "thesis") or "Bull case was generated.")[:2000],
             bear_case=(self._text_attr(bear_case, "thesis") or "Bear case was generated.")[:2000],
-            risk_case="; ".join(item.summary for item in negative[:3]) or "No unresolved risks were identified.",
+            risk_case="; ".join(item.summary for item in negative[:3])
+            or "No unresolved risks were identified.",
             evaluation="Bull and Bear cases were generated from validated AnalysisBrief only.",
             strongest_positive_evidence=positive[:10],
             strongest_negative_evidence=negative[:10],
@@ -562,7 +584,9 @@ class ReviewWorkflow:
                 raise WorkflowValidationError("judge positive_evidence must have positive polarity")
         for item in decision.negative_evidence:
             if item.polarity not in {EvidencePolarity.NEGATIVE, EvidencePolarity.RISK}:
-                raise WorkflowValidationError("judge negative_evidence must have negative or risk polarity")
+                raise WorkflowValidationError(
+                    "judge negative_evidence must have negative or risk polarity"
+                )
 
         positive_by_id = {item.evidence_id: item for item in brief.positive_evidence_pool}
         negative_by_id = {item.evidence_id: item for item in brief.negative_evidence_pool}
@@ -588,11 +612,28 @@ class ReviewWorkflow:
         return AgentResult(
             agent_role=self._role_for_name(role_name),
             team=team,
-            status=StepStatus(step=WorkflowStep.FINANCIAL_AGENTS if team == AgentTeam.FINANCIAL else WorkflowStep.PRESENTATION_AGENTS, state=StepState.COMPLETED),
-            headline=(self._text_attr(finding, "summary") or self._text_attr(finding, "headline") or role_name)[:300],
-            conclusion=(self._text_attr(finding, "handoff_summary") or self._text_attr(finding, "summary") or role_name)[:1200],
-            key_evidence=self._collect_evidence([finding], "key_evidence", EvidencePolarity.POSITIVE)[:10],
-            counter_evidence=self._collect_evidence([finding], "counter_evidence", EvidencePolarity.NEGATIVE)[:10],
+            status=StepStatus(
+                step=WorkflowStep.FINANCIAL_AGENTS
+                if team == AgentTeam.FINANCIAL
+                else WorkflowStep.PRESENTATION_AGENTS,
+                state=StepState.COMPLETED,
+            ),
+            headline=(
+                self._text_attr(finding, "summary")
+                or self._text_attr(finding, "headline")
+                or role_name
+            )[:300],
+            conclusion=(
+                self._text_attr(finding, "handoff_summary")
+                or self._text_attr(finding, "summary")
+                or role_name
+            )[:1200],
+            key_evidence=self._collect_evidence(
+                [finding], "key_evidence", EvidencePolarity.POSITIVE
+            )[:10],
+            counter_evidence=self._collect_evidence(
+                [finding], "counter_evidence", EvidencePolarity.NEGATIVE
+            )[:10],
             open_questions=self._list_attr(finding, "missing_data")[:8],
             confidence=float(getattr(finding, "confidence", 0.5)),
         )
@@ -637,8 +678,8 @@ class ReviewWorkflow:
         self,
         by_role: dict[str, BaseModel],
         role_name: str,
-        model_type: type[BaseModel],
-    ) -> BaseModel:
+        model_type: type[ModelT],
+    ) -> ModelT:
         finding = by_role.get(role_name)
         if finding is None:
             raise WorkflowValidationError(f"{role_name} finding is required")
@@ -677,6 +718,7 @@ class ReviewWorkflow:
                 canonical,
                 f"{case_name}.{evidence_field}",
             )
+            assert canonical is not None
             validated.append(canonical)
 
         return self._dedupe_evidence(validated)
@@ -691,6 +733,7 @@ class ReviewWorkflow:
         for item in items:
             canonical = allowed_by_id.get(item.evidence_id)
             self._validate_evidence_item_against_canonical(item, canonical, field_name)
+            assert canonical is not None
             validated.append(canonical)
         return self._dedupe_evidence(validated)
 
@@ -782,7 +825,9 @@ class ReviewWorkflow:
             evidence_id=self._slug(str(data.get("evidence_id") or fallback_id))[:80],
             polarity=polarity,
             summary=str(data.get("summary") or data.get("claim") or "Evidence item")[:300],
-            detail=str(data.get("detail") or data.get("summary") or data.get("claim") or "Evidence item")[:1200],
+            detail=str(
+                data.get("detail") or data.get("summary") or data.get("claim") or "Evidence item"
+            )[:1200],
             impact_areas=self._impact_areas(data),
             source_ref=source_ref,
             metric_name=data.get("metric_name") or data.get("metric"),

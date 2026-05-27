@@ -4,6 +4,7 @@ These models define the boundary between workflow stages:
 Data ingestion -> Financial Agents -> Presentation Agents ->
 Evidence Aggregation -> Debate -> Judge -> MarkdownRenderer.
 """
+
 from __future__ import annotations
 
 import re
@@ -20,7 +21,6 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-
 
 NonEmptyText = Annotated[str, Field(min_length=1)]
 
@@ -347,27 +347,19 @@ class GuidanceFinding(AgentFinding):
 
 
 class EPSQualityFinding(EarningsQualityFinding):
-    agent_name: Literal["EarningsQualityAnalyst", "EPSQualityAnalyst"] = (
-        "EarningsQualityAnalyst"
-    )
+    agent_name: Literal["EarningsQualityAnalyst", "EPSQualityAnalyst"] = "EarningsQualityAnalyst"
 
 
 class ProfitabilityFinding(EarningsQualityFinding):
-    agent_name: Literal["EarningsQualityAnalyst", "ProfitabilityAnalyst"] = (
-        "EarningsQualityAnalyst"
-    )
+    agent_name: Literal["EarningsQualityAnalyst", "ProfitabilityAnalyst"] = "EarningsQualityAnalyst"
 
 
 class CashFlowFcfFinding(CashFlowRiskFinding):
-    agent_name: Literal["CashFlowRiskAnalyst", "CashFlowFcfAnalyst"] = (
-        "CashFlowRiskAnalyst"
-    )
+    agent_name: Literal["CashFlowRiskAnalyst", "CashFlowFcfAnalyst"] = "CashFlowRiskAnalyst"
 
 
 class BalanceSheetRiskFinding(CashFlowRiskFinding):
-    agent_name: Literal["CashFlowRiskAnalyst", "BalanceSheetRiskAnalyst"] = (
-        "CashFlowRiskAnalyst"
-    )
+    agent_name: Literal["CashFlowRiskAnalyst", "BalanceSheetRiskAnalyst"] = "CashFlowRiskAnalyst"
 
 
 class FindingCoverage(str, Enum):

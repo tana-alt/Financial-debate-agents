@@ -215,26 +215,38 @@ class FakeLLM:
 
 class HallucinatedBullEvidenceLLM(FakeLLM):
     def _bull_json(self) -> str:
-        return super()._bull_json().replace(
-            "EarningsQualityAnalyst:positive",
-            "invented:positive",
+        return (
+            super()
+            ._bull_json()
+            .replace(
+                "EarningsQualityAnalyst:positive",
+                "invented:positive",
+            )
         )
 
 
 class InvestmentAdviceJudgeLLM(FakeLLM):
     def _judge_json(self) -> str:
-        return super()._judge_json().replace(
-            "EPS quality and FCF path look constructive with caveats.",
-            "You should buy the stock.",
+        return (
+            super()
+            ._judge_json()
+            .replace(
+                "EPS quality and FCF path look constructive with caveats.",
+                "You should buy the stock.",
+            )
         )
 
 
 class ChangedJudgeSourceLLM(FakeLLM):
     def _judge_json(self) -> str:
-        return super()._judge_json().replace(
-            '"section_id": "eps"',
-            '"section_id": "invented"',
-            1,
+        return (
+            super()
+            ._judge_json()
+            .replace(
+                '"section_id": "eps"',
+                '"section_id": "invented"',
+                1,
+            )
         )
 
 
@@ -311,7 +323,9 @@ def test_review_workflow_runs_ordered_api_first_steps(monkeypatch):
         "judge",
         "markdown_renderer",
     ]
-    assert [result.agent_role.value for result in response.analysis_brief.financial_agent_results] == [
+    assert [
+        result.agent_role.value for result in response.analysis_brief.financial_agent_results
+    ] == [
         "earnings_quality",
         "cash_flow_risk",
     ]

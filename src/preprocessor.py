@@ -5,6 +5,7 @@ This module is THE answer to context engineering: the LLM never sees
 the raw 80-page filing. By the time anything reaches an agent, it has
 been (a) chunked semantically and (b) annotated with structured numbers.
 """
+
 from __future__ import annotations
 
 import os
@@ -23,11 +24,11 @@ log = structlog.get_logger()
 
 
 SECTION_PATTERNS = {
-    "revenue":  re.compile(r"(net\s+revenue|total\s+revenue|net\s+sales)", re.I),
-    "eps":      re.compile(r"(earnings\s+per\s+share|diluted\s+eps)", re.I),
+    "revenue": re.compile(r"(net\s+revenue|total\s+revenue|net\s+sales)", re.I),
+    "eps": re.compile(r"(earnings\s+per\s+share|diluted\s+eps)", re.I),
     "guidance": re.compile(r"(outlook|guidance)", re.I),
     "segments": re.compile(r"(segment|geographic|product\s+category)", re.I),
-    "risk":     re.compile(r"(risk\s+factor|forward[- ]looking\s+statement)", re.I),
+    "risk": re.compile(r"(risk\s+factor|forward[- ]looking\s+statement)", re.I),
 }
 
 

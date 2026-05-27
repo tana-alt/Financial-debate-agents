@@ -3,13 +3,13 @@
 LLM providers return text. The rest of the application should only see
 validated Pydantic models.
 """
+
 from __future__ import annotations
 
 import json
 from typing import TypeVar
 
 from pydantic import BaseModel
-
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 

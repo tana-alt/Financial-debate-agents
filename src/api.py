@@ -1,11 +1,11 @@
 """FastAPI entry point for the earnings review workflow."""
+
 from __future__ import annotations
 
 from fastapi import Depends, FastAPI
 
 from .llm import get_provider
 from .workflow import ReviewRequest, ReviewResponse, ReviewWorkflow
-
 
 app = FastAPI(title="Earnings Debate Agent API")
 

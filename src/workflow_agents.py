@@ -9,17 +9,18 @@ small compatibility bridge for Plan/active models that may not have landed in
 ``workflow_models`` yet, but runtime agent specs always point at strict
 workflow contracts rather than permissive ad-hoc fallback models.
 """
+
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
 from typing import Any, Literal, Mapping
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator
 
+from . import workflow_models as _workflow_models
 from .llm import LLMProvider
 from .structured import parse_model
-from . import workflow_models as _workflow_models
 
 
 class WorkflowAgentError(RuntimeError):
@@ -34,8 +35,6 @@ class AgentOutputValidationError(WorkflowAgentError):
     """Raised when the LLM output cannot be parsed into the output contract."""
 
 
-FindingKey = Literal["earnings_quality", "cash_flow_risk", "management_intent", "guidance"]
-FindingCoverage = Literal["supporting", "opposing", "not_material", "missing"]
 REQUIRED_FINDING_COVERAGE_KEYS = {
     "earnings_quality",
     "cash_flow_risk",
@@ -79,57 +78,47 @@ class _BridgeCashFlowRiskFinding(_PlanFinding):
 
 
 class _BridgeBullCase(_workflow_models.BullCase):
-    finding_coverage: dict[FindingKey, FindingCoverage]
+    finding_coverage: _workflow_models.FindingCoverageMap
 
     @field_validator("finding_coverage")
     @classmethod
     def require_all_specialist_findings(
-        cls, value: dict[FindingKey, FindingCoverage]
-    ) -> dict[FindingKey, FindingCoverage]:
+        cls, value: _workflow_models.FindingCoverageMap
+    ) -> _workflow_models.FindingCoverageMap:
         missing = REQUIRED_FINDING_COVERAGE_KEYS.difference(value)
         if missing:
-            raise ValueError(
-                "finding_coverage missing keys: " + ", ".join(sorted(missing))
-            )
+            raise ValueError("finding_coverage missing keys: " + ", ".join(sorted(missing)))
         return value
 
 
 class _BridgeBearCase(_workflow_models.BearCase):
-    finding_coverage: dict[FindingKey, FindingCoverage]
+    finding_coverage: _workflow_models.FindingCoverageMap
 
     @field_validator("finding_coverage")
     @classmethod
     def require_all_specialist_findings(
-        cls, value: dict[FindingKey, FindingCoverage]
-    ) -> dict[FindingKey, FindingCoverage]:
+        cls, value: _workflow_models.FindingCoverageMap
+    ) -> _workflow_models.FindingCoverageMap:
         missing = REQUIRED_FINDING_COVERAGE_KEYS.difference(value)
         if missing:
-            raise ValueError(
-                "finding_coverage missing keys: " + ", ".join(sorted(missing))
-            )
+            raise ValueError("finding_coverage missing keys: " + ", ".join(sorted(missing)))
         return value
 
 
 EarningsQualityFinding = getattr(
     _workflow_models, "EarningsQualityFinding", _BridgeEarningsQualityFinding
 )
-CashFlowRiskFinding = getattr(
-    _workflow_models, "CashFlowRiskFinding", _BridgeCashFlowRiskFinding
-)
+CashFlowRiskFinding = getattr(_workflow_models, "CashFlowRiskFinding", _BridgeCashFlowRiskFinding)
 ManagementIntentFinding = getattr(_workflow_models, "ManagementIntentFinding")
 GuidanceFinding = getattr(_workflow_models, "GuidanceFinding")
 
 _WorkflowBullCase = getattr(_workflow_models, "BullCase")
 _WorkflowBearCase = getattr(_workflow_models, "BearCase")
 BullCase = (
-    _WorkflowBullCase
-    if "finding_coverage" in _WorkflowBullCase.model_fields
-    else _BridgeBullCase
+    _WorkflowBullCase if "finding_coverage" in _WorkflowBullCase.model_fields else _BridgeBullCase
 )
 BearCase = (
-    _WorkflowBearCase
-    if "finding_coverage" in _WorkflowBearCase.model_fields
-    else _BridgeBearCase
+    _WorkflowBearCase if "finding_coverage" in _WorkflowBearCase.model_fields else _BridgeBearCase
 )
 FinalVerdict = getattr(_workflow_models, "FinalVerdict", _workflow_models.JudgeDecision)
 JudgeDecision = getattr(_workflow_models, "JudgeDecision", FinalVerdict)
@@ -139,9 +128,7 @@ JudgeDecision = getattr(_workflow_models, "JudgeDecision", FinalVerdict)
 EPSQualityFinding = getattr(_workflow_models, "EPSQualityFinding", EarningsQualityFinding)
 ProfitabilityFinding = getattr(_workflow_models, "ProfitabilityFinding", EarningsQualityFinding)
 CashFlowFcfFinding = getattr(_workflow_models, "CashFlowFcfFinding", CashFlowRiskFinding)
-BalanceSheetRiskFinding = getattr(
-    _workflow_models, "BalanceSheetRiskFinding", CashFlowRiskFinding
-)
+BalanceSheetRiskFinding = getattr(_workflow_models, "BalanceSheetRiskFinding", CashFlowRiskFinding)
 
 
 JsonModel = type[BaseModel]
@@ -223,11 +210,7 @@ class WorkflowAgent:
 
         last_error: Exception | None = None
         for attempt in range(self.max_retries + 1):
-            prompt = (
-                user_prompt
-                if attempt == 0
-                else self._repair_prompt(user_prompt, last_error)
-            )
+            prompt = user_prompt if attempt == 0 else self._repair_prompt(user_prompt, last_error)
             response = self.llm.complete(
                 system=self.spec.system_prompt,
                 user=prompt,

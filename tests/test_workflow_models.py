@@ -2,9 +2,9 @@ import pytest
 from pydantic import ValidationError
 
 from src.workflow_models import (
+    AgentResult,
     AgentRole,
     AgentTeam,
-    AgentResult,
     AnalysisBrief,
     BearCase,
     BullCase,
@@ -14,8 +14,8 @@ from src.workflow_models import (
     EvidenceItem,
     EvidencePolarity,
     FinalVerdict,
-    FindingCoverage,
     FinancialMetrics,
+    FindingCoverage,
     GuidanceFinding,
     ImpactArea,
     JudgeDecision,
