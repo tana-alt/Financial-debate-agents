@@ -9,7 +9,7 @@ outputs/*.md
 samples/cache/
 .DS_Store
 Plan/
-.agent/
+.agents/
 .claude/
 AGENTS.md
 setup/

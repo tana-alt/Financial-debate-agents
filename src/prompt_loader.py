@@ -35,7 +35,7 @@ AGENT_SKILL_FILES = {
 
 
 class SkillAssetError(RuntimeError):
-    """Raised when a workflow agent has no valid runtime skill target."""
+    """Raised when a configured local workflow skill target is invalid."""
 
 
 def read_prompt(relative_path: str) -> str:
@@ -65,15 +65,24 @@ def build_system_prompt(public_role: str, fallback_scope: str) -> str:
     return "\n\n".join(parts)
 
 
-def resolve_skill_target(public_role: str, skill_root: Path = SKILL_ROOT) -> Path:
-    """Resolve the required per-agent skill hook target."""
+def resolve_skill_target(public_role: str, skill_root: Path | None = None) -> Path | None:
+    """Resolve an optional local per-agent skill hook target.
+
+    The public repository carries runtime prompts under ``src/prompts``.  Local
+    ``.agents`` skill files are useful editor/agent hooks, but clean CI
+    checkouts should not require them.
+    """
 
     try:
         relative_path = AGENT_SKILL_FILES[public_role]
     except KeyError as exc:
         raise SkillAssetError(f"unknown workflow agent role: {public_role}") from exc
 
+    skill_root_was_provided = skill_root is not None
+    skill_root = skill_root or SKILL_ROOT
     root = skill_root.resolve()
+    if not root.exists() and not skill_root_was_provided:
+        return None
     path = (root / relative_path).resolve()
     if root not in path.parents:
         raise SkillAssetError(f"skill path escapes skill root: {relative_path}")
