@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SKILL_ROOT = REPO_ROOT / ".agents" / "skills"
 PROMPT_ROOT = REPO_ROOT / "src" / "prompts"
 
 AGENT_ASSETS = {
@@ -42,11 +41,12 @@ def validate_assets(repo_root: Path = REPO_ROOT) -> list[str]:
     skill_root = repo_root / ".agents" / "skills"
     prompt_root = repo_root / "src" / "prompts"
     errors: list[str] = []
+    validate_local_skills = skill_root.exists()
 
     for role, asset in AGENT_ASSETS.items():
         skill_path = skill_root / asset["skill"] / "SKILL.md"
         prompt_path = prompt_root / asset["prompt"]
-        if not skill_path.is_file():
+        if validate_local_skills and not skill_path.is_file():
             errors.append(f"{role}: missing skill asset {skill_path.relative_to(repo_root)}")
         if not prompt_path.is_file():
             errors.append(f"{role}: missing prompt asset {prompt_path.relative_to(repo_root)}")
@@ -66,7 +66,7 @@ def main() -> int:
         for error in errors:
             print(error, file=sys.stderr)
         return 1
-    print("Validated 7 workflow agent skill/prompt assets.")
+    print("Validated 7 workflow agent prompt assets.")
     return 0
 
 

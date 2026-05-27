@@ -22,7 +22,6 @@ def test_asset_validator_accepts_repo_assets():
 
 def test_asset_validator_fails_on_missing_assets(tmp_path: Path):
     repo = tmp_path
-    (repo / ".agents" / "skills").mkdir(parents=True)
     (repo / "src" / "prompts" / "shared").mkdir(parents=True)
     for shared in (
         "global_policy.md",
@@ -34,7 +33,6 @@ def test_asset_validator_fails_on_missing_assets(tmp_path: Path):
     errors = validate_assets(repo)
 
     assert errors
-    assert any("missing skill asset" in error for error in errors)
     assert any("missing prompt asset" in error for error in errors)
 
 
@@ -57,12 +55,19 @@ def test_runtime_prompt_mapping_has_exactly_seven_non_index_prompts():
     assert all("index" not in Path(path).parts for path in AGENT_PROMPT_FILES.values())
 
 
-def test_runtime_skill_targets_resolve_to_skill_files():
-    for public_role in AGENT_SKILL_FILES:
-        path = resolve_skill_target(public_role)
+def test_runtime_skill_targets_resolve_to_local_skill_files(tmp_path: Path):
+    skill_root = tmp_path / "skills"
+    for relative_path in AGENT_SKILL_FILES.values():
+        path = skill_root / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# local skill", encoding="utf-8")
 
-        assert path.name == "SKILL.md"
-        assert path.is_file()
+    for public_role in AGENT_SKILL_FILES:
+        resolved = resolve_skill_target(public_role, skill_root)
+
+        assert resolved is not None
+        assert resolved.name == "SKILL.md"
+        assert resolved.is_file()
 
 
 def test_system_prompt_includes_shared_policy_and_one_agent_prompt():
