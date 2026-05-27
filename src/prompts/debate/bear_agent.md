@@ -114,3 +114,10 @@ BearCase:
 - If downside evidence is weak, use `stance_strength: "weak"` and avoid
   overstating `bad`.
 - Reject trading recommendations or evidence without `source_ref`.
+
+## Report Quality Addendum
+
+- Material claims must use numeric grounding when routed values or disclosed source values are available.
+- Do not list every metric mechanically; include the value that supports the specific claim.
+- If the necessary value is missing, put the limitation in `missing_data` rather than implying precision.
+- External sources are out of scope unless they were explicitly routed as accepted interactive research.

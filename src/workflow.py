@@ -17,6 +17,10 @@ from typing import Any, TypeVar
 from pydantic import BaseModel
 
 from .llm import LLMProvider
+from .report_quality_numeric_grounding import validate_numeric_grounding
+from .report_quality_source_inventory import source_inventory_lines
+from .report_quality_evidence_matrix import evidence_matrix_lines
+from .report_quality_guidance import validate_guidance_required
 from .workflow_agents import (
     BearAgent,
     BullAgent,
@@ -124,6 +128,10 @@ class MarkdownRenderer:
             "",
             decision.summary,
             "",
+            "## Evidence Matrix",
+            "",
+            *evidence_matrix_lines([*decision.positive_evidence, *decision.negative_evidence]),
+            "",
             "## Agent Analysis",
             "",
             *self._agent_analysis_lines(brief),
@@ -160,6 +168,10 @@ class MarkdownRenderer:
                 "## Analyst Brief",
                 "",
                 brief.synthesis,
+                "",
+                "## Source Inventory",
+                "",
+                *source_inventory_lines(brief, decision),
                 "",
                 "## Sources",
                 "",
@@ -316,6 +328,7 @@ class ReviewWorkflow:
             lambda: self._run_judge(request, metrics, brief, bull_case, bear_case),
         )
         decision = self._validate_judge_decision(decision, brief, debate)
+        validate_numeric_grounding([*decision.positive_evidence, *decision.negative_evidence])
 
         markdown = self._record_step(
             steps,
@@ -394,6 +407,8 @@ class ReviewWorkflow:
             raise WorkflowValidationError(
                 "document_sections, document_files, or filing_url is required"
             )
+
+        validate_guidance_required(metrics, sections)
 
         return metrics, sections
 

@@ -54,3 +54,37 @@ Use these caps unless a stricter schema-specific rule applies:
 - important missing data: max `0.60`
 - no usable counter evidence: max `0.60`
 - conflicting EPS and FCF signals: max `0.70`
+
+## Numeric Grounding Policy
+
+Do not mechanically list every available metric.
+
+However, every material analytical claim should be grounded by at least one of:
+
+1. a precomputed metric value,
+2. a direct source quote or disclosed value,
+3. a `missing_data` caveat explaining why the claim cannot be numerically verified.
+
+When using qualitative words such as strong, large, meaningful, improved,
+deteriorated, beat, missed, margin expansion, pressure, concentration,
+cash conversion, or investment intensity, include the most relevant routed value
+or explicitly mark the claim as qualitative / unverified.
+
+Do not calculate new metrics. Use only metric IDs and values supplied by the
+workflow or directly disclosed values inside routed source sections.
+
+## External Source Separation Policy
+
+External web/news/analyst sources are not part of the default report workflow.
+They must be handled as an interactive external-research appendix unless a human
+explicitly accepts and routes them back into the workflow.
+
+Classify external sources by timing before use:
+
+- `contemporary_external`: near the earnings event date
+- `post_event_external`: after the event and potentially hindsight-biased
+- `stale_external`: before the event and not tied to the reported quarter
+- `unknown`: date or timing cannot be verified
+
+The main verdict should prefer same-period primary company sources, filings,
+earnings releases, presentations, transcripts, and routed precomputed metrics.
