@@ -60,7 +60,7 @@ class OpenAIProvider(LLMProvider):
         from openai import OpenAI
 
         self.client = OpenAI()  # picks up OPENAI_API_KEY from env
-        self.model = model or os.getenv("OPENAI_MODEL", "gpt-4o")
+        self.model = model or os.getenv("OPENAI_MODEL", "gpt-5.4-mini")
 
     def complete(self, system, user, max_tokens=2048, temperature=0.7):
         params: dict[str, Any] = {
@@ -361,6 +361,8 @@ class FakeProvider(LLMProvider):
         source_ref: dict[str, Any],
         summary: str,
     ) -> str:
+        metric_name = "free_cash_flow" if "fcf" in summary.lower() else "eps_surprise_pct"
+        unit = "USD" if metric_name == "free_cash_flow" else "%"
         return f"""
         {{
           "evidence_id": "{evidence_id}",
@@ -369,6 +371,9 @@ class FakeProvider(LLMProvider):
           "detail": "{summary}",
           "impact_areas": ["overall"],
           "source_ref": {json.dumps(source_ref)},
+          "metric_name": "{metric_name}",
+          "value": 1.0,
+          "unit": "{unit}",
           "confidence": 0.70
         }}
         """

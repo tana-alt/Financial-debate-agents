@@ -119,3 +119,10 @@ or `eps_constraint`. Put those judgments inside `summary`,
 - Evidence must include `source_ref`.
 - Do not recalculate CFO, FCF, CapEx, leverage, liquidity ratios, or changes.
 - Do not make a final `good | neutral | bad` verdict.
+
+## Report Quality Addendum
+
+- Material claims must use numeric grounding when routed values or disclosed source values are available.
+- Do not list every metric mechanically; include the value that supports the specific claim.
+- If the necessary value is missing, put the limitation in `missing_data` rather than implying precision.
+- External sources are out of scope unless they were explicitly routed as accepted interactive research.

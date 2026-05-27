@@ -457,3 +457,47 @@ FCF can improve after investment intensity moderates.
 - [ ] `pytest` が通る
 - [ ] GitHub Actions が通る
 - [ ] 投資助言ではないことが明記されている
+
+## Report Quality Controls
+
+This project does not simply ask an LLM to write an earnings report. The report
+quality layer enforces deterministic controls around the existing workflow:
+
+1. Guidance acquisition gate
+2. Claim-to-source Evidence Matrix
+3. Numeric grounding check for material claims
+4. Source timing classification
+5. Missing-data confidence caps
+6. Source inventory table
+7. Interactive external-source appendix separated from the main report
+
+Material claims do not need every possible KPI. They need the value, quote, or
+missing-data caveat that supports that specific claim. External sources remain
+outside `report.md` unless a human explicitly accepts and routes them.
+
+### Applying the report-quality setup
+
+Run each setup program separately from the repository root:
+
+```bash
+python setup/01_setup_report_quality_contracts.py
+python setup/02_setup_source_timing.py
+python setup/03_setup_guidance_gate.py
+python setup/04_setup_evidence_matrix_renderer.py
+python setup/05_setup_source_inventory.py
+python setup/06_setup_missing_data_confidence.py
+python setup/07_setup_numeric_grounding.py
+python setup/08_setup_external_source_separation.py
+python setup/09_setup_prompt_policies.py
+python setup/10_setup_report_quality_tests.py
+pytest tests/test_report_quality_full.py
+```
+
+For legacy tests only, these escape hatches are available:
+
+```bash
+EARNINGS_DEBATE_REQUIRE_GUIDANCE=0
+EARNINGS_DEBATE_REQUIRE_NUMERIC_GROUNDING=0
+```
+
+Do not disable those gates for the internship/demo report run.

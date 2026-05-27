@@ -108,3 +108,10 @@ Do not include extra top-level fields such as `management_priorities`,
 - Do not evaluate guidance-vs-consensus, conservatism, optimism, or revision
   risk.
 - Do not calculate financial values.
+
+## Report Quality Addendum
+
+- Material claims must use numeric grounding when routed values or disclosed source values are available.
+- Do not list every metric mechanically; include the value that supports the specific claim.
+- If the necessary value is missing, put the limitation in `missing_data` rather than implying precision.
+- External sources are out of scope unless they were explicitly routed as accepted interactive research.

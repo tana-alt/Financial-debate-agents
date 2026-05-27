@@ -8,3 +8,10 @@ outputs/*.md
 !outputs/.gitkeep
 samples/cache/
 .DS_Store
+Plan/
+.agent/
+.claude/
+AGENTS.md
+setup/
+archive/
+.report_quality_full_backup/

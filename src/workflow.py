@@ -13,6 +13,11 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .llm import LLMProvider
+from .report_quality_evidence_matrix import evidence_matrix_lines
+from .report_quality_guidance import validate_guidance_required
+from .report_quality_missing_data import apply_confidence_caps, missing_data_lines
+from .report_quality_numeric_grounding import validate_numeric_grounding
+from .report_quality_source_inventory import source_inventory_lines
 from .workflow_agents import (
     CashFlowRiskAnalyst,
     EarningsQualityAnalyst,
@@ -86,6 +91,10 @@ class MarkdownRenderer:
             "",
             decision.summary,
             "",
+            "## Evidence Matrix",
+            "",
+            *evidence_matrix_lines([*decision.positive_evidence, *decision.negative_evidence]),
+            "",
             "## Agent Analysis",
             "",
             *self._agent_analysis_lines(brief),
@@ -122,6 +131,14 @@ class MarkdownRenderer:
                 "## Analyst Brief",
                 "",
                 brief.synthesis,
+                "",
+                "## Source Inventory",
+                "",
+                *source_inventory_lines(brief, decision),
+                "",
+                "## Missing Data Caveats",
+                "",
+                *missing_data_lines(brief, decision),
                 "",
                 "## Sources",
                 "",
@@ -292,6 +309,8 @@ class ReviewWorkflow:
             lambda: self.judge_runner.run(request, metrics, brief, bull_case, bear_case),
         )
         decision = self.validator.validate_judge_decision(decision, brief)
+        decision = apply_confidence_caps(decision, brief)
+        validate_numeric_grounding([*decision.positive_evidence, *decision.negative_evidence])
 
         markdown = self._record_step(
             steps,
@@ -370,6 +389,8 @@ class ReviewWorkflow:
             raise WorkflowValidationError(
                 "document_sections, document_files, or filing_url is required"
             )
+
+        validate_guidance_required(metrics, sections)
 
         return metrics, sections
 
