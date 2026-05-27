@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
+REPO_ROOT = Path(__file__).resolve().parents[1]
 PROMPT_ROOT = Path(__file__).resolve().parent / "prompts"
+SKILL_ROOT = REPO_ROOT / ".agents" / "skills"
 SHARED_PROMPT_FILES = (
     "shared/global_policy.md",
     "shared/evidence_policy.md",
@@ -21,6 +22,20 @@ AGENT_PROMPT_FILES = {
     "BearAgent": "debate/bear_agent.md",
     "JudgeAgent": "debate/judge_agent.md",
 }
+
+AGENT_SKILL_FILES = {
+    "EarningsQualityAnalyst": "earnings-quality-analyst/SKILL.md",
+    "CashFlowRiskAnalyst": "cash-flow-risk-analyst/SKILL.md",
+    "ManagementIntentAnalyst": "management-intent-analyst/SKILL.md",
+    "GuidanceAnalyst": "guidance-analyst/SKILL.md",
+    "BullAgent": "bull-agent/SKILL.md",
+    "BearAgent": "bear-agent/SKILL.md",
+    "JudgeAgent": "judge-agent/SKILL.md",
+}
+
+
+class SkillAssetError(RuntimeError):
+    """Raised when a workflow agent has no valid runtime skill target."""
 
 
 def read_prompt(relative_path: str) -> str:
@@ -50,10 +65,29 @@ def build_system_prompt(public_role: str, fallback_scope: str) -> str:
     return "\n\n".join(parts)
 
 
+def resolve_skill_target(public_role: str, skill_root: Path = SKILL_ROOT) -> Path:
+    """Resolve the required per-agent skill hook target."""
+
+    try:
+        relative_path = AGENT_SKILL_FILES[public_role]
+    except KeyError as exc:
+        raise SkillAssetError(f"unknown workflow agent role: {public_role}") from exc
+
+    root = skill_root.resolve()
+    path = (root / relative_path).resolve()
+    if root not in path.parents:
+        raise SkillAssetError(f"skill path escapes skill root: {relative_path}")
+    if not path.is_file():
+        raise SkillAssetError(f"{public_role} skill target is missing: {path}")
+    return path
+
+
 def _mask_other_role_names(text: str, public_role: str) -> str:
     """Keep role detection stable when prompt prose references peer agents."""
 
     for role in AGENT_PROMPT_FILES:
         if role != public_role:
-            text = text.replace(role, role.replace("Analyst", " Analyst").replace("Agent", " Agent"))
+            text = text.replace(
+                role, role.replace("Analyst", " Analyst").replace("Agent", " Agent")
+            )
     return text

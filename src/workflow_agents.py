@@ -20,7 +20,7 @@ from pydantic import BaseModel, field_validator
 
 from . import workflow_models as _workflow_models
 from .llm import LLMProvider
-from .prompt_loader import build_system_prompt
+from .prompt_loader import build_system_prompt, resolve_skill_target
 from .structured import parse_model
 
 
@@ -206,6 +206,7 @@ class WorkflowAgent:
         if context:
             merged.update(context)
         merged.update(kwargs)
+        resolve_skill_target(self.spec.public_role)
         routed_context = self._select_context(merged)
         user_prompt = self._build_user_prompt(routed_context)
 
