@@ -18,8 +18,12 @@ import requests
 import structlog
 from dotenv import load_dotenv
 
+from .errors import EarningsReviewError, format_api_error_detail
 from .llm import get_provider
-from .workflow import ReviewWorkflow
+from .report_quality_guidance import GuidanceAcquisitionError
+from .report_quality_numeric_grounding import NumericGroundingError
+from .workflow import ReviewWorkflow, WorkflowValidationError
+from .workflow_agents import WorkflowAgentError
 from .workflow_models import ReviewRequest
 
 
@@ -79,14 +83,37 @@ def run(
     if api_url == "local" or (
         api_url == "http://127.0.0.1:8000" and os.getenv("LLM_PROVIDER", "").lower() == "fake"
     ):
-        body = (
-            ReviewWorkflow(get_provider())
-            .run(ReviewRequest.model_validate(payload))
-            .model_dump(mode="json")
-        )
+        try:
+            body = (
+                ReviewWorkflow(get_provider())
+                .run(ReviewRequest.model_validate(payload))
+                .model_dump(mode="json")
+            )
+        except (
+            EarningsReviewError,
+            WorkflowAgentError,
+            WorkflowValidationError,
+            NumericGroundingError,
+            GuidanceAcquisitionError,
+        ) as exc:
+            raise click.ClickException(str(exc)) from exc
     else:
-        response = requests.post(f"{api_url.rstrip('/')}/reviews", json=payload, timeout=300)
-        response.raise_for_status()
+        try:
+            response = requests.post(f"{api_url.rstrip('/')}/reviews", json=payload, timeout=300)
+            response.raise_for_status()
+        except requests.Timeout as exc:
+            raise click.ClickException(f"API request timed out: {api_url}") from exc
+        except requests.ConnectionError as exc:
+            raise click.ClickException(f"API request failed to connect: {api_url}") from exc
+        except requests.HTTPError as exc:
+            detail = None
+            try:
+                detail = response.json().get("detail")
+            except ValueError:
+                detail = response.text
+            raise click.ClickException(format_api_error_detail(detail)) from exc
+        except requests.RequestException as exc:
+            raise click.ClickException(f"API request failed: {exc}") from exc
         body = response.json()
 
     output_path = out_dir

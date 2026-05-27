@@ -19,6 +19,7 @@ from typing import Any, Literal, Mapping
 from pydantic import BaseModel, field_validator
 
 from . import workflow_models as _workflow_models
+from .errors import APIConnectionError, APIHTTPStatusError, APIRateLimitError, APITimeoutError
 from .llm import LLMProvider
 from .prompt_loader import build_system_prompt, resolve_skill_target
 from .structured import parse_model
@@ -34,6 +35,49 @@ class AgentRoleMismatch(WorkflowAgentError):
 
 class AgentOutputValidationError(WorkflowAgentError):
     """Raised when the LLM output cannot be parsed into the output contract."""
+
+
+def _provider_status_code(exc: Exception) -> int | None:
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    if isinstance(status_code, int):
+        return status_code
+    status_code = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+    return status_code if isinstance(status_code, int) else None
+
+
+def _llm_provider_api_error(exc: Exception):
+    module_name = exc.__class__.__module__.lower()
+    class_name = exc.__class__.__name__
+    text = f"{module_name}.{class_name}: {exc}".lower()
+    status_code = _provider_status_code(exc)
+    details = {"error_type": class_name}
+    is_provider_error = module_name.startswith(("openai", "anthropic"))
+
+    if isinstance(exc, TimeoutError) or "timeout" in text or "timed out" in text:
+        return APITimeoutError("LLM provider request timed out", source="llm", details=details)
+    if status_code == 429 or "ratelimit" in text or "rate limit" in text:
+        return APIRateLimitError(
+            "LLM provider request was rate limited",
+            source="llm",
+            upstream_status_code=status_code,
+            details=details,
+        )
+    if "connection" in text:
+        return APIConnectionError(
+            "LLM provider request failed to connect",
+            source="llm",
+            details=details,
+        )
+    if is_provider_error or status_code is not None:
+        return APIHTTPStatusError(
+            "LLM provider request failed",
+            source="llm",
+            upstream_status_code=status_code,
+            retryable=status_code is None or status_code >= 500,
+            details=details,
+        )
+    return None
 
 
 REQUIRED_FINDING_COVERAGE_KEYS = {
@@ -213,12 +257,18 @@ class WorkflowAgent:
         last_error: Exception | None = None
         for attempt in range(self.max_retries + 1):
             prompt = user_prompt if attempt == 0 else self._repair_prompt(user_prompt, last_error)
-            response = self.llm.complete(
-                system=self.spec.system_prompt,
-                user=prompt,
-                max_tokens=self.spec.max_tokens,
-                temperature=self.spec.temperature,
-            )
+            try:
+                response = self.llm.complete(
+                    system=self.spec.system_prompt,
+                    user=prompt,
+                    max_tokens=self.spec.max_tokens,
+                    temperature=self.spec.temperature,
+                )
+            except Exception as exc:
+                api_error = _llm_provider_api_error(exc)
+                if api_error is not None:
+                    raise api_error from exc
+                raise
             text = getattr(response, "text", response)
             try:
                 parsed = parse_model(self.spec.output_model, str(text))
