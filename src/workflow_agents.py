@@ -250,6 +250,13 @@ class WorkflowAgent:
             "- 入力された routed_context だけを使う。\n"
             "- 財務指標を自分で計算しない。\n"
             "- 株価予測、目標株価、売買推奨を書かない。\n"
+            "- EvidenceItem.source_ref は routed_context.source_index にある"
+            " source_ref/source entry を正確にコピーする。source_id, source_type,"
+            " url, document_id, section_id, metric_name, page, title を省略・変更しない。\n"
+            "- `financial_api:NVDA:2027Q1` のような汎用source_idを新規作成しない。"
+            " source_id は source_index に存在する値だけを使う。\n"
+            "- routed_context に valid_positive_evidence_ids や valid_negative_evidence_ids が"
+            "ある場合、strongest evidence の evidence_id はその一覧から完全一致で選ぶ。\n"
             "- JSONのみを返す。Markdownや前置きは禁止。\n"
             f"- role field がある場合は {self.spec.output_agent_name!r} を入れる。\n\n"
             "# routed_context\n"
@@ -263,7 +270,13 @@ class WorkflowAgent:
             f"{original_prompt}\n\n"
             "# previous_output_error\n"
             f"{type(error).__name__}: {error}\n\n"
-            "上のエラーを修正し、同じschemaに合うJSONのみを返してください。"
+            "上のエラーを修正し、同じschemaに合うJSONのみを返してください。\n"
+            "`source_ref` は routed_context.source_index に存在するentryを正確にコピーしてください。"
+            "source_id, source_type, url, document_id, section_id, metric_name, page, title を"
+            "省略・変更しないでください。source_indexに存在しないsource_idを作らないでください。\n"
+            "`source_ref.source_type` が `financial_api` または `derived_metric` の場合、"
+            "入力済みsource_refにある正確な `metric_name` を nested `source_ref` に必ず含めてください。"
+            "metric_nameを新規作成したり、根拠を補正・捏造したりしないでください。"
         )
 
     def _validate_role(self, output: BaseModel) -> None:

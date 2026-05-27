@@ -88,10 +88,10 @@ def _fetch_filing_html(url: str) -> str:
     return fetch_filing_html(url)
 
 
-def _segment_filing(html: str):
+def _segment_filing(html: str, url: str | None = None):
     from .preprocessor import segment_filing
 
-    return segment_filing(html)
+    return segment_filing(html, url=url)
 
 
 def _document_files_to_sections(document_files):
@@ -124,6 +124,10 @@ class MarkdownRenderer:
             "",
             decision.summary,
             "",
+            "## Agent Analysis",
+            "",
+            *self._agent_analysis_lines(brief),
+            "",
             "## Positive Evidence",
             "",
         ]
@@ -137,9 +141,13 @@ class MarkdownRenderer:
                 "",
                 decision.eps_outlook,
                 "",
+                f"Reason: {self._eps_outlook_reason(brief, decision)}",
+                "",
                 "## FCF Outlook",
                 "",
                 decision.fcf_outlook,
+                "",
+                f"Reason: {self._fcf_outlook_reason(brief, decision)}",
                 "",
                 "## Bull Case",
                 "",
@@ -153,10 +161,99 @@ class MarkdownRenderer:
                 "",
                 brief.synthesis,
                 "",
+                "## Sources",
+                "",
+                *self._source_lines(brief),
+                "",
                 "_This report is an earnings analysis artifact and is not investment advice._",
             ]
         )
         return "\n".join(lines).strip() + "\n"
+
+    def _agent_analysis_lines(self, brief: AnalysisBrief) -> list[str]:
+        findings = [
+            brief.earnings_quality_finding,
+            brief.cash_flow_risk_finding,
+            brief.management_intent_finding,
+            brief.guidance_finding,
+        ]
+        lines: list[str] = []
+        for finding in findings:
+            lines.append(
+                f"- **{finding.agent_name}** ({finding.stance}, "
+                f"confidence {finding.confidence:.2f}): {finding.handoff_summary}"
+            )
+        return lines
+
+    def _eps_outlook_reason(self, brief: AnalysisBrief, decision: JudgeDecision) -> str:
+        if decision.eps_outlook_reason:
+            return decision.eps_outlook_reason
+        parts = [
+            brief.earnings_quality_finding.handoff_summary,
+            brief.management_intent_finding.handoff_summary,
+            brief.guidance_finding.handoff_summary,
+        ]
+        return self._compact_reason(parts, fallback=decision.rationale)
+
+    def _fcf_outlook_reason(self, brief: AnalysisBrief, decision: JudgeDecision) -> str:
+        if decision.fcf_outlook_reason:
+            return decision.fcf_outlook_reason
+        parts = [
+            brief.cash_flow_risk_finding.handoff_summary,
+            brief.management_intent_finding.handoff_summary,
+            brief.guidance_finding.handoff_summary,
+        ]
+        return self._compact_reason(parts, fallback=decision.rationale)
+
+    def _compact_reason(self, parts: list[str], *, fallback: str) -> str:
+        text = " ".join(part.strip() for part in parts if part and part.strip()).strip()
+        if not text:
+            text = fallback
+        return text[:1200]
+
+    def _source_lines(self, brief: AnalysisBrief) -> list[str]:
+        findings = [
+            brief.earnings_quality_finding,
+            brief.cash_flow_risk_finding,
+            brief.management_intent_finding,
+            brief.guidance_finding,
+        ]
+        lines: list[str] = []
+        for finding in findings:
+            lines.append(f"### {finding.agent_name}")
+            refs = self._unique_source_refs([*finding.key_evidence, *finding.counter_evidence])
+            if not refs:
+                lines.append("- No source references emitted.")
+                continue
+            for ref in refs:
+                title = ref.title or ref.source_id
+                url = str(ref.url) if ref.url else "no URL in source_ref"
+                locator = ref.metric_name or ref.section_id or ref.document_id or "source"
+                lines.append(f"- `{ref.source_id}` ({locator}): {title} — {url}")
+        return lines
+
+    def _unique_source_refs(self, items: list[EvidenceItem]) -> list[SourceRef]:
+        seen: set[
+            tuple[str, str, str | None, str | None, str | None, int | None, str | None, str | None]
+        ] = set()
+        refs: list[SourceRef] = []
+        for item in items:
+            ref = item.source_ref
+            key = (
+                ref.source_id,
+                ref.source_type.value,
+                ref.document_id,
+                ref.section_id,
+                ref.metric_name,
+                ref.page,
+                ref.title,
+                str(ref.url) if ref.url else None,
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            refs.append(ref)
+        return refs
 
 
 class ReviewWorkflow:
@@ -242,6 +339,8 @@ class ReviewWorkflow:
             fiscal_period=request.fiscal_period,
             steps=steps,
             analysis_brief=brief,
+            bull_case=bull_case,
+            bear_case=bear_case,
             debate_result=debate,
             judge_decision=decision,
             markdown_report=markdown,
@@ -258,7 +357,7 @@ class ReviewWorkflow:
                     state=StepState.FAILED,
                     started_at=started_at,
                     finished_at=datetime.now(timezone.utc),
-                    error=str(exc),
+                    error=self._step_error_message(exc),
                 )
             )
             raise
@@ -272,6 +371,12 @@ class ReviewWorkflow:
         )
         return result
 
+    def _step_error_message(self, exc: Exception) -> str:
+        message = str(exc)
+        if len(message) <= 1000:
+            return message
+        return message[:997] + "..."
+
     def _ingest(self, request: ReviewRequest) -> tuple[FinancialMetrics, list[DocumentSection]]:
         metrics = self._normalize_metrics(
             request.financial_metrics or self._fetch_financial_metrics(request)
@@ -281,8 +386,9 @@ class ReviewWorkflow:
             sections.extend(_document_files_to_sections(request.document_files))
 
         if not sections and request.filing_url is not None:
-            html = _fetch_filing_html(str(request.filing_url))
-            sections = _segment_filing(html)
+            filing_url = str(request.filing_url)
+            html = _fetch_filing_html(filing_url)
+            sections = _segment_filing(html, url=filing_url)
 
         if not sections:
             raise WorkflowValidationError(
@@ -426,7 +532,8 @@ class ReviewWorkflow:
         financial_findings: list[BaseModel],
         presentation_findings: list[BaseModel],
     ) -> AnalysisBrief:
-        allowed_source_ids = self._allowed_source_ids(metrics, sections)
+        canonical_sources = self._canonical_source_refs(metrics, sections)
+        allowed_source_ids = set(canonical_sources)
         (
             earnings_quality_finding,
             cash_flow_risk_finding,
@@ -462,13 +569,14 @@ class ReviewWorkflow:
                 ),
             ]
         )
-        risks = [item for item in negative if EvidencePolarity.NEGATIVE == item.polarity]
-
         if not positive:
             raise WorkflowValidationError("positive evidence pool is empty after aggregation")
         if not negative:
             raise WorkflowValidationError("negative evidence pool is empty after aggregation")
         self._validate_evidence_sources([*positive, *negative], allowed_source_ids)
+        positive = self._canonicalize_evidence_sources(positive, canonical_sources)
+        negative = self._canonicalize_evidence_sources(negative, canonical_sources)
+        risks = [item for item in negative if EvidencePolarity.NEGATIVE == item.polarity]
 
         synthesis = " ".join(
             self._text_attr(finding, "handoff_summary")
@@ -510,12 +618,26 @@ class ReviewWorkflow:
             "guidance_finding": brief.guidance_finding,
             "positive_evidence_pool": brief.positive_evidence_pool,
             "negative_evidence_pool": brief.negative_evidence_pool,
+            "valid_positive_evidence_ids": [
+                item.evidence_id for item in brief.positive_evidence_pool
+            ],
+            "valid_negative_evidence_ids": [
+                item.evidence_id for item in brief.negative_evidence_pool
+            ],
             "disputed_points": brief.risk_evidence_pool,
             "missing_data": [],
         }
-        bull_case = BullAgent(self.llm).run(context)
-        self._validate_finding_coverage(bull_case, "bull_case")
-        self._validate_no_investment_advice_text(bull_case, "bull_case")
+        positive_by_id = {item.evidence_id: item for item in brief.positive_evidence_pool}
+        negative_by_id = {item.evidence_id: item for item in brief.negative_evidence_pool}
+
+        bull_case, positive = self._run_debate_case(
+            BullAgent,
+            context,
+            "strongest_positive_evidence",
+            positive_by_id,
+            "bull_case",
+            EvidencePolarity.POSITIVE,
+        )
         bear_context = {
             **context,
             "bull_case_summary": {
@@ -525,28 +647,14 @@ class ReviewWorkflow:
                 "finding_coverage": getattr(bull_case, "finding_coverage", {}),
             },
         }
-        bear_case = BearAgent(self.llm).run(bear_context)
-        self._validate_finding_coverage(bear_case, "bear_case")
-        self._validate_no_investment_advice_text(bear_case, "bear_case")
-
-        positive_by_id = {item.evidence_id: item for item in brief.positive_evidence_pool}
-        negative_by_id = {item.evidence_id: item for item in brief.negative_evidence_pool}
-        positive = self._validated_case_evidence(
-            bull_case,
-            "strongest_positive_evidence",
-            positive_by_id,
-            "bull_case",
-            EvidencePolarity.POSITIVE,
-        )
-        negative = self._validated_case_evidence(
-            bear_case,
+        bear_case, negative = self._run_debate_case(
+            BearAgent,
+            bear_context,
             "strongest_negative_evidence",
             negative_by_id,
             "bear_case",
             EvidencePolarity.NEGATIVE,
         )
-        bull_case = bull_case.model_copy(update={"strongest_positive_evidence": positive})
-        bear_case = bear_case.model_copy(update={"strongest_negative_evidence": negative})
 
         debate = DebateResult(
             bull_case=(self._text_attr(bull_case, "thesis") or "Bull case was generated.")[:2000],
@@ -559,6 +667,42 @@ class ReviewWorkflow:
             unresolved_questions=self._list_attr(bear_case, "unresolved_risks")[:8],
         )
         return bull_case, bear_case, debate
+
+    def _run_debate_case(
+        self,
+        agent_class: Any,
+        context: dict[str, Any],
+        evidence_field: str,
+        evidence_by_id: dict[str, EvidenceItem],
+        case_name: str,
+        expected_polarity: EvidencePolarity,
+    ) -> tuple[BaseModel, list[EvidenceItem]]:
+        last_error: WorkflowValidationError | None = None
+        for _ in range(2):
+            run_context = context
+            if last_error is not None:
+                run_context = {
+                    **context,
+                    "evidence_validation_error": str(last_error),
+                    "valid_evidence_ids": sorted(evidence_by_id),
+                }
+            case = agent_class(self.llm).run(run_context)
+            self._validate_finding_coverage(case, case_name)
+            self._validate_no_investment_advice_text(case, case_name)
+            try:
+                evidence = self._validated_case_evidence(
+                    case,
+                    evidence_field,
+                    evidence_by_id,
+                    case_name,
+                    expected_polarity,
+                )
+            except WorkflowValidationError as exc:
+                last_error = exc
+                continue
+            return case.model_copy(update={evidence_field: evidence}), evidence
+        assert last_error is not None
+        raise last_error
 
     def _run_judge(
         self,
@@ -871,24 +1015,58 @@ class ReviewWorkflow:
             result.append(item)
         return result
 
-    def _allowed_source_ids(
+    def _canonical_source_refs(
         self,
         metrics: FinancialMetrics,
         sections: list[DocumentSection],
-    ) -> set[tuple[str, str, str | None, str | None, str | None, int | None, str | None]]:
+    ) -> dict[
+        tuple[
+            str,
+            str,
+            str | None,
+            str | None,
+            str | None,
+            int | None,
+            str | None,
+        ],
+        SourceRef,
+    ]:
         return {
-            self._source_signature(source)
+            self._source_signature(source): source
             for source in [
                 *metrics.source_refs,
                 *(section.source_ref for section in sections),
             ]
         }
 
+    def _canonicalize_evidence_sources(
+        self,
+        items: list[EvidenceItem],
+        canonical_sources: dict[
+            tuple[str, str, str | None, str | None, str | None, int | None, str | None],
+            SourceRef,
+        ],
+    ) -> list[EvidenceItem]:
+        return [
+            item.model_copy(
+                update={"source_ref": canonical_sources[self._source_signature(item.source_ref)]}
+            )
+            for item in items
+        ]
+
     def _validate_evidence_sources(
         self,
         items: list[EvidenceItem],
         allowed_source_ids: set[
-            tuple[str, str, str | None, str | None, str | None, int | None, str | None]
+            tuple[
+                str,
+                str,
+                str | None,
+                str | None,
+                str | None,
+                int | None,
+                str | None,
+            ]
         ],
     ) -> None:
         for item in items:

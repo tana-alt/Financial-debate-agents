@@ -287,7 +287,7 @@ def fetch_filing_html(url: str) -> str:
     return r.text
 
 
-def segment_filing(html: str) -> list[DocumentSection]:
+def segment_filing(html: str, url: str | None = None) -> list[DocumentSection]:
     """Split filing into typed sections by scanning headers."""
     soup = BeautifulSoup(html, "lxml")
     # Collect text from common structural elements
@@ -319,12 +319,15 @@ def segment_filing(html: str) -> list[DocumentSection]:
         result.append(
             DocumentSection(
                 section_id=section_id,
-                source_ref=SourceRef(
-                    source_id=section_id,
-                    source_type=SourceType.FILING,
-                    document_id="filing-html",
-                    section_id=section_id,
-                    title=f"Filing section: {name}",
+                source_ref=SourceRef.model_validate(
+                    {
+                        "source_id": section_id,
+                        "source_type": SourceType.FILING,
+                        "url": url,
+                        "document_id": "filing-html",
+                        "section_id": section_id,
+                        "title": f"Filing section: {name}",
+                    }
                 ),
                 heading=name,
                 text=joined,

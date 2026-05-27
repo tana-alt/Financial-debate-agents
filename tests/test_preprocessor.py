@@ -39,13 +39,15 @@ def test_build_financial_metrics_computes_eps_surprise():
 
 def test_segment_filing_extracts_semantic_sections():
     html = Path("tests/fixtures/sample_filing.html").read_text(encoding="utf-8")
+    filing_url = "https://www.sec.gov/Archives/example/sample.htm"
 
-    sections = segment_filing(html)
+    sections = segment_filing(html, url=filing_url)
     names = {section.heading for section in sections}
 
     assert {"revenue", "eps", "guidance", "segments", "risk"}.issubset(names)
     assert all(section.text for section in sections)
     assert all(section.source_ref.source_id for section in sections)
+    assert all(str(section.source_ref.url) == filing_url for section in sections)
 
 
 def test_document_files_to_sections_extracts_local_text_fixture():

@@ -103,6 +103,10 @@ BullCase:
 ## Validation Rules
 
 - `strongest_positive_evidence` must contain at least one item.
+- Every item in `strongest_positive_evidence` must be copied from
+  `positive_evidence_pool` with the exact same `evidence_id` and `source_ref`.
+  Do not create, rename, summarize into a new id, or cite evidence outside the
+  validated AnalysisBrief pools.
 - `finding_coverage` must include all four specialist finding keys.
 - `weak_points` is required.
 - If positive evidence is weak, use `stance_strength: "weak"` and

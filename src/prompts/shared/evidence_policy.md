@@ -16,6 +16,16 @@ Every evidence item must include:
 `source_ref` must point to a routed source section or precomputed metric supplied
 by the workflow. Do not invent source identifiers.
 
+Copy `source_ref` from the supplied `source_index` exactly. Do not abbreviate,
+rename, or generalize `source_id`. Do not create generic identifiers such as
+`financial_api:<ticker>:<period>`. Preserve locator fields including
+`url`, `document_id`, `section_id`, `metric_name`, `page`, and `title` when
+present.
+
+When `source_ref.source_type` is `financial_api` or `derived_metric`, the
+`source_ref` object must include the exact `metric_name` from the supplied
+precomputed metric source. Do not omit it and do not create a new metric name.
+
 ## Positive And Counter Evidence
 
 Each specialist finding, Bull case, Bear case, and final verdict must consider

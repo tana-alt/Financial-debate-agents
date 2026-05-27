@@ -63,20 +63,30 @@ class OpenAIProvider(LLMProvider):
         self.model = model or os.getenv("OPENAI_MODEL", "gpt-4o")
 
     def complete(self, system, user, max_tokens=2048, temperature=0.7):
-        resp = self.client.chat.completions.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            messages=[
+        params: dict[str, Any] = {
+            "model": self.model,
+            "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-        )
+        }
+        if _openai_uses_max_completion_tokens(self.model):
+            params["max_completion_tokens"] = max(max_tokens, 4096)
+        else:
+            params["max_tokens"] = max_tokens
+            params["temperature"] = temperature
+
+        resp = self.client.chat.completions.create(**params)
         return LLMResponse(
             text=resp.choices[0].message.content or "",
             input_tokens=resp.usage.prompt_tokens,
             output_tokens=resp.usage.completion_tokens,
         )
+
+
+def _openai_uses_max_completion_tokens(model: str) -> bool:
+    normalized = model.lower()
+    return normalized.startswith(("gpt-5", "o1", "o3", "o4"))
 
 
 class FakeProvider(LLMProvider):
@@ -332,7 +342,15 @@ class FakeProvider(LLMProvider):
                     }
                 ],
                 "eps_outlook": "EPS can improve if revenue growth and margin discipline continue.",
+                "eps_outlook_reason": (
+                    "Revenue growth and margin discipline support EPS improvement, "
+                    "while counter evidence keeps the assessment conditional."
+                ),
                 "fcf_outlook": "FCF can improve after investment intensity moderates.",
+                "fcf_outlook_reason": (
+                    "FCF can improve if investment intensity moderates, but near-term "
+                    "CapEx pressure remains a constraint."
+                ),
             }
         )
 

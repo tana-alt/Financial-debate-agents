@@ -98,48 +98,19 @@ EPS の質を判断するには revenue、margin、operating expense、segment m
 EarningsQualityFinding:
   agent_name: Literal["EarningsQualityAnalyst"]
   stance: Literal["positive", "negative", "mixed", "neutral", "unclear"]
-  eps_surprise_assessment:
-    direction: Literal["beat", "miss", "inline", "unknown"]
-    magnitude: Literal["high", "moderate", "low", "unknown"]
-    summary: str
-    evidence_refs: list[str]
-  quality_of_earnings:
-    quality: Literal["high", "medium", "low", "mixed", "unclear"]
-    temporary_factors: list[str]
-    recurring_factors: list[str]
-    evidence_refs: list[str]
-  revenue_quality:
-    assessment: Literal["strong", "weak", "mixed", "neutral", "unclear"]
-    summary: str
-    evidence_refs: list[str]
-  margin_trend:
-    gross_margin: Literal["improving", "deteriorating", "stable", "unclear"]
-    operating_margin: Literal["improving", "deteriorating", "stable", "unclear"]
-    summary: str
-    evidence_refs: list[str]
-  operating_leverage:
-    assessment: Literal["positive", "negative", "neutral", "mixed", "unclear"]
-    summary: str
-    evidence_refs: list[str]
-  segment_mix_effect:
-    assessment: Literal["positive", "negative", "neutral", "mixed", "unclear"]
-    summary: str
-    evidence_refs: list[str]
-  eps_outlook_signal:
-    direction: Literal["positive", "negative", "neutral", "mixed", "unclear"]
-    time_horizon: Literal["near_term", "medium_term", "long_term", "mixed", "unclear"]
-    summary: str
-    evidence_refs: list[str]
-  fcf_implication:
-    direction: Literal["positive", "negative", "neutral", "mixed", "unclear"]
-    summary: str
-    evidence_refs: list[str]
+  summary: str
   key_evidence: list[EvidenceItem]
   counter_evidence: list[EvidenceItem]
   confidence: float
   missing_data: list[str]
   handoff_summary: str
 ```
+
+Do not include extra top-level fields such as `eps_surprise_assessment`,
+`quality_of_earnings`, `revenue_quality`, `margin_trend`,
+`operating_leverage`, `segment_mix_effect`, `eps_outlook_signal`, or
+`fcf_implication`. Put those judgments inside `summary`, `handoff_summary`,
+`key_evidence`, `counter_evidence`, and `missing_data`.
 
 ## Validation Rules
 

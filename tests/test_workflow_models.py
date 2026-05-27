@@ -185,7 +185,9 @@ def test_verdict_label_is_lowercase_enum():
         "positive_evidence": [evidence()],
         "negative_evidence": [evidence("ev:negative:capex", EvidencePolarity.NEGATIVE)],
         "eps_outlook": "EPS may improve if margin strength persists.",
+        "eps_outlook_reason": "Margin strength supports EPS improvement.",
         "fcf_outlook": "FCF may improve after investment intensity normalizes.",
+        "fcf_outlook_reason": "FCF depends on investment intensity normalizing.",
     }
 
     with pytest.raises(ValidationError):
@@ -301,7 +303,9 @@ def test_final_verdict_alias_preserves_judge_decision_api():
         positive_evidence=[evidence()],
         negative_evidence=[evidence("ev:negative:fcf", EvidencePolarity.NEGATIVE)],
         eps_outlook="EPS path is balanced.",
+        eps_outlook_reason="EPS positives and risks are balanced.",
         fcf_outlook="FCF path is uncertain.",
+        fcf_outlook_reason="FCF conversion remains uncertain.",
     )
 
     assert isinstance(verdict, JudgeDecision)
@@ -317,7 +321,9 @@ def test_judge_decision_requires_positive_and_negative_evidence():
             positive_evidence=[],
             negative_evidence=[evidence("ev:negative:fcf", EvidencePolarity.NEGATIVE)],
             eps_outlook="EPS path is balanced.",
+            eps_outlook_reason="EPS positives and risks are balanced.",
             fcf_outlook="FCF path is uncertain.",
+            fcf_outlook_reason="FCF conversion remains uncertain.",
         )
 
 
@@ -356,7 +362,31 @@ def test_full_review_response_contains_structured_result_and_markdown():
         positive_evidence=[positive],
         negative_evidence=[negative],
         eps_outlook="EPS can rise if margin expansion persists.",
+        eps_outlook_reason="Margin expansion supports EPS upside.",
         fcf_outlook="FCF can improve if CapEx intensity moderates.",
+        fcf_outlook_reason="FCF depends on CapEx intensity moderating.",
+    )
+    bull = BullCase(
+        thesis="EPS quality and guidance support a good interpretation.",
+        stance_strength="moderate",
+        strongest_positive_evidence=[positive],
+        eps_bull_argument="EPS can improve if margin strength persists.",
+        fcf_bull_argument="FCF can improve if CapEx intensity moderates.",
+        conditions_needed=["Demand remains durable."],
+        weak_points=["Near-term FCF remains pressured."],
+        finding_coverage=complete_finding_coverage(),
+        confidence=0.7,
+    )
+    bear = BearCase(
+        thesis="Higher CapEx pressures near-term FCF.",
+        stance_strength="moderate",
+        strongest_negative_evidence=[negative],
+        eps_bear_argument="EPS may rely on margin assumptions that could fade.",
+        fcf_bear_argument="FCF may stay pressured if CapEx remains high.",
+        failure_modes=["CapEx remains elevated."],
+        counter_to_bull_case=["Bull case depends on sustained demand."],
+        finding_coverage=complete_finding_coverage(),
+        confidence=0.65,
     )
 
     response = ReviewResponse(
@@ -365,6 +395,8 @@ def test_full_review_response_contains_structured_result_and_markdown():
         fiscal_period="2025Q3",
         steps=[status],
         analysis_brief=brief,
+        bull_case=bull,
+        bear_case=bear,
         debate_result=debate,
         judge_decision=decision,
         markdown_report="# Earnings Review\n\nVerdict: good",

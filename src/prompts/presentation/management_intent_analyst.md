@@ -87,26 +87,17 @@ ManagementIntentFinding:
   agent_name: Literal["ManagementIntentAnalyst"]
   stance: Literal["positive", "negative", "mixed", "neutral", "unclear"]
   summary: str
-  management_priorities: list[ManagementPriority]
-  strategic_drivers: list[StrategicDriver]
-  investment_actions: list[InvestmentAction]
-  eps_implication:
-    direction: Literal["positive", "negative", "neutral", "mixed", "unclear"]
-    time_horizon: Literal["near_term", "medium_term", "long_term", "mixed", "unclear"]
-    rationale: str
-    evidence_refs: list[str]
-  fcf_implication:
-    direction: Literal["positive", "negative", "neutral", "mixed", "unclear"]
-    time_horizon: Literal["near_term", "medium_term", "long_term", "mixed", "unclear"]
-    rationale: str
-    evidence_refs: list[str]
   key_evidence: list[EvidenceItem]
   counter_evidence: list[EvidenceItem]
-  risks: list[RiskItem]
   confidence: float
   missing_data: list[str]
   handoff_summary: str
 ```
+
+Do not include extra top-level fields such as `management_priorities`,
+`strategic_drivers`, `investment_actions`, `eps_implication`,
+`fcf_implication`, or `risks`. Put those judgments inside `summary`,
+`handoff_summary`, `key_evidence`, `counter_evidence`, and `missing_data`.
 
 ## Validation Rules
 

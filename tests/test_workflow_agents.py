@@ -9,6 +9,7 @@ from src.workflow_agents import (
     BullAgent,
     CashFlowRiskAnalyst,
     EarningsQualityAnalyst,
+    GuidanceAnalyst,
     JudgeAgent,
     JudgeDecision,
     build_default_agents,
@@ -86,6 +87,33 @@ def cash_flow_risk_json(agent_name="CashFlowRiskAnalyst"):
       "confidence": 0.66,
       "missing_data": [],
       "handoff_summary": "FCF outlook is mixed because CapEx remains elevated."
+    }}
+    """
+
+
+def guidance_json(source_ref):
+    return f"""
+    {{
+      "agent_name": "GuidanceAnalyst",
+      "stance": "mixed",
+      "summary": "Guidance is above consensus but execution risk remains.",
+      "key_evidence": [
+        {{
+          "evidence_id": "ev:guidance:positive",
+          "polarity": "positive",
+          "summary": "Guidance exceeded consensus.",
+          "detail": "Precomputed guidance consensus delta supports a positive EPS implication.",
+          "impact_areas": ["eps"],
+          "source_ref": {source_ref},
+          "confidence": 0.70
+        }}
+      ],
+      "counter_evidence": [
+        {evidence_json("ev:guidance:negative", "negative", "filing:guidance-risk")}
+      ],
+      "confidence": 0.64,
+      "missing_data": [],
+      "handoff_summary": "Guidance is positive with execution risk."
     }}
     """
 
@@ -183,7 +211,9 @@ def judge_json():
         }
       ],
       "eps_outlook": "Margins support future EPS.",
-      "fcf_outlook": "CapEx timing is still uncertain."
+      "eps_outlook_reason": "Margins and EPS surprise support future EPS.",
+      "fcf_outlook": "CapEx timing is still uncertain.",
+      "fcf_outlook_reason": "CapEx timing keeps FCF conversion uncertain."
     }
     """
 
@@ -275,6 +305,74 @@ def test_agent_retries_once_for_invalid_json():
     assert result.agent_name == "EarningsQualityAnalyst"
     assert len(llm.calls) == 2
     assert "previous_output_error" in llm.calls[1]["user"]
+
+
+def test_agent_repair_prompt_explains_financial_source_ref_metric_name():
+    invalid_source_ref = """
+    {
+      "source_id": "financial:guidance:revenue_delta",
+      "source_type": "financial_api"
+    }
+    """
+    valid_source_ref = """
+    {
+      "source_id": "financial:guidance:revenue_delta",
+      "source_type": "financial_api",
+      "metric_name": "revenue_guidance_consensus_delta"
+    }
+    """
+    llm = FakeLLM([guidance_json(invalid_source_ref), guidance_json(valid_source_ref)])
+    agent = GuidanceAnalyst(llm, max_retries=1)
+
+    result = agent.run(
+        {
+            "run_spec": {"ticker": "NVDA", "fiscal_period": "2027Q1"},
+            "guidance_consensus_deltas": {"revenue_guidance_consensus_delta": 1.2},
+            "source_index": [
+                {
+                    "source_id": "financial:guidance:revenue_delta",
+                    "source_type": "financial_api",
+                    "metric_name": "revenue_guidance_consensus_delta",
+                }
+            ],
+        }
+    )
+
+    repair_prompt = llm.calls[1]["user"]
+    assert result.agent_name == "GuidanceAnalyst"
+    assert result.key_evidence[0].source_ref.metric_name == "revenue_guidance_consensus_delta"
+    assert "previous_output_error" in repair_prompt
+    assert "financial source_ref requires metric_name" in repair_prompt
+    assert "metric_name" in repair_prompt
+    assert "根拠を補正・捏造" in repair_prompt
+
+
+def test_agent_prompt_requires_exact_source_index_references():
+    llm = FakeLLM([earnings_quality_json()])
+    agent = EarningsQualityAnalyst(llm)
+
+    agent.run(
+        {
+            "run_spec": {"ticker": "NVDA", "fiscal_period": "2027Q1"},
+            "eps_consensus_delta": {"eps_surprise_pct": 3.2},
+            "source_index": [
+                {
+                    "source_id": "financial:eps_surprise_pct",
+                    "source_type": "financial_api",
+                    "metric_name": "eps_surprise_pct",
+                }
+            ],
+        }
+    )
+
+    user_prompt = llm.calls[0]["user"]
+    assert "routed_context.source_index" in user_prompt
+    assert "source_id は source_index に存在する値だけを使う" in user_prompt
+    assert "financial_api:NVDA:2027Q1" in user_prompt
+    assert (
+        "source_id, source_type, url, document_id, section_id, metric_name, page, title"
+        in user_prompt
+    )
 
 
 def test_agent_stops_after_single_retry():

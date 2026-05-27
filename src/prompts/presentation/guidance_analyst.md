@@ -91,28 +91,7 @@ Disallowed context:
 GuidanceFinding:
   agent_name: Literal["GuidanceAnalyst"]
   stance: Literal["positive", "negative", "mixed", "neutral", "unclear"]
-  guidance_vs_consensus:
-    assessment: Literal["above_consensus", "below_consensus", "in_line", "mixed", "not_provided", "unclear"]
-    metric_assessments: list[GuidanceMetricAssessment]
-    summary: str
-    evidence_refs: list[str]
-  conservatism_level: Literal["conservative", "balanced", "aggressive", "mixed", "unclear"]
-  assumption_quality:
-    assessment: Literal["credible", "weak", "mixed", "unclear"]
-    summary: str
-    evidence_refs: list[str]
-  revision_risk:
-    level: Literal["low", "moderate", "high", "unclear"]
-    summary: str
-    evidence_refs: list[str]
-  eps_implication:
-    direction: Literal["positive", "negative", "neutral", "mixed", "unclear"]
-    rationale: str
-    evidence_refs: list[str]
-  fcf_implication:
-    direction: Literal["positive", "negative", "neutral", "mixed", "unclear"]
-    rationale: str
-    evidence_refs: list[str]
+  summary: str
   key_evidence: list[EvidenceItem]
   counter_evidence: list[EvidenceItem]
   confidence: float
@@ -120,11 +99,21 @@ GuidanceFinding:
   handoff_summary: str
 ```
 
+Do not include extra top-level fields such as `guidance_vs_consensus`,
+`conservatism_level`, `assumption_quality`, `revision_risk`,
+`eps_implication`, or `fcf_implication`. Put those judgments inside
+`summary`, `handoff_summary`, `key_evidence`, `counter_evidence`, and
+`missing_data`.
+
 ## Validation Rules
 
 - `key_evidence` and `counter_evidence` are required decision inputs.
 - If counter evidence cannot be found, state that in `missing_data` and use
   `confidence <= 0.60`.
 - Evidence must include `source_ref`.
+- If evidence uses a precomputed guidance or consensus metric with
+  `source_type: financial_api` or `source_type: derived_metric`, copy its
+  `metric_name` into the nested `source_ref`. A financial metric `source_ref`
+  without `metric_name` is invalid.
 - Do not calculate guidance deltas from raw values.
 - Do not use ManagementIntentAnalyst output as evidence.

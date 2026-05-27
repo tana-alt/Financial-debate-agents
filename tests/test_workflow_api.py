@@ -196,7 +196,9 @@ class FakeLLM:
             }
           ],
           "eps_outlook": "EPS can improve if revenue growth and margin discipline continue.",
-          "fcf_outlook": "FCF can improve after investment intensity moderates."
+          "eps_outlook_reason": "Revenue growth and margin discipline support EPS improvement.",
+          "fcf_outlook": "FCF can improve after investment intensity moderates.",
+          "fcf_outlook_reason": "FCF can improve if investment intensity moderates."
         }
         """
 
@@ -424,6 +426,39 @@ def test_workflow_rejects_source_ref_page_and_title_changes():
             canonical,
             "repro",
         )
+
+
+def test_workflow_canonicalizes_valid_evidence_source_url():
+    workflow = ReviewWorkflow(FakeLLM())
+    canonical = SourceRef(
+        source_id="filing:segments",
+        source_type=SourceType.FILING,
+        url="https://www.sec.gov/Archives/example/nvda.htm",
+        document_id="filing-html",
+        section_id="filing:segments",
+        title="Filing section: segments",
+    )
+    emitted = EvidenceItem(
+        evidence_id="ev-source",
+        polarity=EvidencePolarity.POSITIVE,
+        summary="Segment evidence.",
+        detail="Segment evidence detail.",
+        impact_areas=[ImpactArea.OVERALL],
+        source_ref=SourceRef(
+            source_id="filing:segments",
+            source_type=SourceType.FILING,
+            document_id="filing-html",
+            section_id="filing:segments",
+            title="Filing section: segments",
+        ),
+        confidence=0.7,
+    )
+
+    canonical_sources = {workflow._source_signature(canonical): canonical}
+    workflow._validate_evidence_sources([emitted], set(canonical_sources))
+    [updated] = workflow._canonicalize_evidence_sources([emitted], canonical_sources)
+
+    assert str(updated.source_ref.url) == "https://www.sec.gov/Archives/example/nvda.htm"
 
 
 def test_reviews_endpoint_delegates_to_workflow():

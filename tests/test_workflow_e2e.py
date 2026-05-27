@@ -33,9 +33,12 @@ def test_fake_provider_runs_seven_agent_workflow_without_keys(monkeypatch):
     for section in (
         "## Verdict",
         "## Summary",
+        "## Agent Analysis",
         "## Positive Evidence",
         "## Negative Evidence",
         "## EPS Outlook",
         "## FCF Outlook",
+        "Reason:",
+        "## Sources",
     ):
         assert section in response.markdown_report

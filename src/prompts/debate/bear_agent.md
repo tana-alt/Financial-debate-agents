@@ -103,6 +103,10 @@ BearCase:
 ## Validation Rules
 
 - `strongest_negative_evidence` must contain at least one item.
+- Every item in `strongest_negative_evidence` must be copied from
+  `negative_evidence_pool` with the exact same `evidence_id` and `source_ref`.
+  Do not create, rename, summarize into a new id, or cite evidence outside the
+  validated AnalysisBrief pools.
 - `finding_coverage` must include all four specialist finding keys.
 - `failure_modes` is required.
 - `counter_to_bull_case` is required because `BullCaseSummary` is always

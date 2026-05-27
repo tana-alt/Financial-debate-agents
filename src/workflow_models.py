@@ -485,7 +485,9 @@ class JudgeDecision(WorkflowModel):
     positive_evidence: list[EvidenceItem] = Field(min_length=1, max_length=10)
     negative_evidence: list[EvidenceItem] = Field(min_length=1, max_length=10)
     eps_outlook: str = Field(min_length=1, max_length=1200)
+    eps_outlook_reason: str = Field(min_length=1, max_length=2000)
     fcf_outlook: str = Field(min_length=1, max_length=1200)
+    fcf_outlook_reason: str = Field(min_length=1, max_length=2000)
     purpose: Literal["earnings_review_not_investment_advice"] = (
         "earnings_review_not_investment_advice"
     )
@@ -501,6 +503,8 @@ class ReviewResponse(WorkflowModel):
     fiscal_period: str = Field(pattern=r"^\d{4}Q[1-4]$")
     steps: list[StepStatus] = Field(min_length=1, max_length=20)
     analysis_brief: AnalysisBrief
+    bull_case: BullCase
+    bear_case: BearCase
     debate_result: DebateResult
     judge_decision: JudgeDecision
     markdown_report: str = Field(min_length=1, max_length=20000)
