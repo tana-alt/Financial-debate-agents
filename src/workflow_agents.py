@@ -20,6 +20,7 @@ from pydantic import BaseModel, field_validator
 
 from . import workflow_models as _workflow_models
 from .llm import LLMProvider
+from .prompt_loader import build_system_prompt, resolve_skill_target
 from .structured import parse_model
 
 
@@ -205,6 +206,7 @@ class WorkflowAgent:
         if context:
             merged.update(context)
         merged.update(kwargs)
+        resolve_skill_target(self.spec.public_role)
         routed_context = self._select_context(merged)
         user_prompt = self._build_user_prompt(routed_context)
 
@@ -276,13 +278,7 @@ class WorkflowAgent:
 
 
 def _system(role: str, scope: str) -> str:
-    return (
-        f"あなたは米国株四半期決算レビューworkflowの {role} です。\n"
-        f"責務: {scope}\n"
-        "必要最小限のcontextだけを使い、計算済みデータと根拠文書から解釈する。\n"
-        "入力にない事実、外部知識、投資助言、株価予測、目標株価は禁止。\n"
-        "出力は必ずJSONのみ。"
-    )
+    return build_system_prompt(role, scope)
 
 
 class EarningsQualityAnalyst(WorkflowAgent):
