@@ -19,7 +19,7 @@ def test_cli_fake_smoke_writes_report_and_workflow_result(monkeypatch, tmp_path)
         [
             "run",
             "--input-json",
-            "samples/nvda_2025q3_request.json",
+            "samples/request.example.json",
             "--out",
             str(out_dir),
         ],
