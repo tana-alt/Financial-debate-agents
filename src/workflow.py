@@ -94,6 +94,12 @@ def _segment_filing(html: str):
     return segment_filing(html)
 
 
+def _document_files_to_sections(document_files):
+    from .preprocessor import document_files_to_sections
+
+    return document_files_to_sections(document_files)
+
+
 class MarkdownRenderer:
     """Deterministic Markdown rendering from validated structured results."""
 
@@ -271,13 +277,17 @@ class ReviewWorkflow:
             request.financial_metrics or self._fetch_financial_metrics(request)
         )
         sections = list(request.document_sections)
+        if request.document_files:
+            sections.extend(_document_files_to_sections(request.document_files))
 
         if not sections and request.filing_url is not None:
             html = _fetch_filing_html(str(request.filing_url))
             sections = _segment_filing(html)
 
         if not sections:
-            raise WorkflowValidationError("document_sections or filing_url is required")
+            raise WorkflowValidationError(
+                "document_sections, document_files, or filing_url is required"
+            )
 
         return metrics, sections
 
@@ -865,7 +875,7 @@ class ReviewWorkflow:
         self,
         metrics: FinancialMetrics,
         sections: list[DocumentSection],
-    ) -> set[tuple[str, str, str | None, str | None, str | None]]:
+    ) -> set[tuple[str, str, str | None, str | None, str | None, int | None, str | None]]:
         return {
             self._source_signature(source)
             for source in [
@@ -877,7 +887,9 @@ class ReviewWorkflow:
     def _validate_evidence_sources(
         self,
         items: list[EvidenceItem],
-        allowed_source_ids: set[tuple[str, str, str | None, str | None, str | None]],
+        allowed_source_ids: set[
+            tuple[str, str, str | None, str | None, str | None, int | None, str | None]
+        ],
     ) -> None:
         for item in items:
             if self._source_signature(item.source_ref) not in allowed_source_ids:
@@ -889,13 +901,15 @@ class ReviewWorkflow:
     def _source_signature(
         self,
         source: SourceRef,
-    ) -> tuple[str, str, str | None, str | None, str | None]:
+    ) -> tuple[str, str, str | None, str | None, str | None, int | None, str | None]:
         return (
             source.source_id,
             source.source_type.value,
             source.document_id,
             source.section_id,
             source.metric_name,
+            source.page,
+            source.title,
         )
 
     def _extract_role_name(self, model: BaseModel) -> str:

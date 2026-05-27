@@ -8,7 +8,14 @@ from fastapi.testclient import TestClient
 from src import api
 from src.llm import LLMResponse
 from src.workflow import ReviewWorkflow, WorkflowValidationError
-from src.workflow_models import ReviewRequest
+from src.workflow_models import (
+    EvidenceItem,
+    EvidencePolarity,
+    ImpactArea,
+    ReviewRequest,
+    SourceRef,
+    SourceType,
+)
 
 
 class FakeLLM:
@@ -379,6 +386,44 @@ def test_workflow_rejects_judge_evidence_source_ref_changes(monkeypatch):
 
     with pytest.raises(WorkflowValidationError, match="changed the validated source_ref"):
         workflow.run(ReviewRequest.model_validate(_request_payload()))
+
+
+def test_workflow_rejects_source_ref_page_and_title_changes():
+    canonical = EvidenceItem(
+        evidence_id="doc-e1",
+        polarity=EvidencePolarity.POSITIVE,
+        summary="s",
+        detail="d",
+        impact_areas=[ImpactArea.EPS],
+        source_ref=SourceRef(
+            source_id="doc:p1:section-1",
+            source_type=SourceType.EARNINGS_PRESENTATION,
+            document_id="doc",
+            section_id="doc:p1:section-1",
+            page=1,
+            title="Title",
+        ),
+        confidence=0.7,
+    )
+    changed_page = canonical.model_copy(
+        update={
+            "source_ref": SourceRef(
+                source_id="doc:p1:section-1",
+                source_type=SourceType.EARNINGS_PRESENTATION,
+                document_id="doc",
+                section_id="doc:p1:section-1",
+                page=2,
+                title="Different title",
+            )
+        }
+    )
+
+    with pytest.raises(WorkflowValidationError, match="changed the validated source_ref"):
+        ReviewWorkflow(FakeLLM())._validate_evidence_item_against_canonical(
+            changed_page,
+            canonical,
+            "repro",
+        )
 
 
 def test_reviews_endpoint_delegates_to_workflow():

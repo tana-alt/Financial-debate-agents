@@ -5,9 +5,11 @@ import pytest
 from src.preprocessor import (
     build_financial_metrics,
     calculate_surprise_pct,
+    document_files_to_sections,
     safe_float,
     segment_filing,
 )
+from src.workflow_models import DocumentFile
 
 
 def test_safe_float_discards_invalid_external_values():
@@ -44,3 +46,47 @@ def test_segment_filing_extracts_semantic_sections():
     assert {"revenue", "eps", "guidance", "segments", "risk"}.issubset(names)
     assert all(section.text for section in sections)
     assert all(section.source_ref.source_id for section in sections)
+
+
+def test_document_files_to_sections_extracts_local_text_fixture():
+    sections = document_files_to_sections(
+        [
+            DocumentFile(
+                path="tests/fixtures/sample_presentation.txt",
+                source_type="earnings_presentation",
+                document_id="sample-presentation",
+                title="Sample earnings presentation",
+            )
+        ]
+    )
+
+    assert len(sections) == 1
+    section = sections[0]
+    assert section.section_id == "sample-presentation:section-1"
+    assert section.source_ref.source_id == "sample-presentation:section-1"
+    assert section.source_ref.source_type == "earnings_presentation"
+    assert section.source_ref.document_id == "sample-presentation"
+    assert section.source_ref.section_id == "sample-presentation:section-1"
+    assert section.source_ref.title == "Sample earnings presentation"
+    assert "Free cash flow was pressured" in section.text
+
+
+@pytest.mark.parametrize(
+    ("path", "message"),
+    [
+        ("tests/fixtures/missing_presentation.txt", "does not exist"),
+        ("tests/fixtures/sample_filing.html", "unsupported document file extension"),
+    ],
+)
+def test_document_files_to_sections_rejects_invalid_files(path, message):
+    with pytest.raises(ValueError, match=message):
+        document_files_to_sections(
+            [
+                DocumentFile(
+                    path=path,
+                    source_type="earnings_presentation",
+                    document_id="sample-presentation",
+                    title="Sample earnings presentation",
+                )
+            ]
+        )

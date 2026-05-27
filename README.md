@@ -260,6 +260,15 @@ earnings-debate run \
   --out outputs
 ```
 
+ローカルの PDF / text file を読み込む場合は、`document_files` を含む request JSON を指定します。
+
+```bash
+LLM_PROVIDER=fake earnings-debate run \
+  --api-url local \
+  --input-json samples/request.document-files.example.json \
+  --out outputs/document-files-example
+```
+
 成功すると、以下のファイルが生成されます。
 
 ```text
@@ -302,12 +311,45 @@ curl -X POST http://127.0.0.1:8000/reviews \
   "document_sections": [
     {
       "section_id": "eps",
+      "source_ref": {
+        "source_id": "filing:eps",
+        "source_type": "filing",
+        "document_id": "10q-2025q3",
+        "section_id": "eps",
+        "title": "EPS section"
+      },
       "heading": "EPS",
       "text": "Diluted EPS exceeded consensus..."
     }
   ]
 }
 ```
+
+### 9.1 ローカル資料ファイルの指定
+
+`document_sections` を直接指定する代わりに、`document_files` でローカルの PDF / text file を指定できます。指定されたファイルは data ingestion layer で `DocumentSection` に展開され、既存の multi-agent workflow に渡されます。`document_sections` と `document_files` は併用できます。
+
+```json
+{
+  "ticker": "NVDA",
+  "fiscal_period": "2025Q3",
+  "document_files": [
+    {
+      "path": "data/presentations/nvda-q3-2025.pdf",
+      "source_type": "earnings_presentation",
+      "document_id": "nvda-q3-2025-presentation",
+      "title": "NVDA Q3 2025 earnings presentation"
+    }
+  ]
+}
+```
+
+- 対応拡張子は `.pdf`, `.txt`, `.text`, `.md` です。
+- PDF はページ単位で text extraction し、長いページは chunk に分割します。
+- text file は UTF-8 として読み込み、長い本文は chunk に分割します。
+- `source_ref` は `source_id`, `source_type`, `document_id`, `section_id`, `page`, `title` を workflow 内で安定生成します。
+- PDF を repository に含めない場合は、`data/presentations/` などの local path を request JSON に書き、PDF 本体は `.gitignore` 管理または手元配置にしてください。
+- 不正 path、存在しない file、未対応拡張子、抽出 text が空の PDF / text file は validation error として扱います。
 
 ---
 
@@ -368,7 +410,8 @@ FCF can improve after investment intensity moderates.
 │  ├─ test_workflow_models.py
 │  └─ test_preprocessor.py
 ├─ samples/
-│  └─ request.example.json
+│  ├─ request.example.json
+│  └─ request.document-files.example.json
 ├─ outputs/
 │  └─ example/
 │     └─ report.md
@@ -383,8 +426,9 @@ FCF can improve after investment intensity moderates.
 
 現在の MVP では、評価しやすさと再現性を優先しています。
 
-- `financial_metrics` と `document_sections` を明示的に渡す fixture 実行を推奨
+- `financial_metrics` と `document_sections` または `document_files` を明示的に渡す fixture 実行を推奨
 - `filing_url` からの HTML fetch / segmentation は実装済みだが、実運用では filing 形式差分への追加対応が必要
+- PDF extraction は text layer を持つ PDF が対象。scan image PDF の OCR は対象外
 - `presentation_url` と `transcript_url` は入力 contract として保持しているが、自動取得処理は将来拡張
 - `yfinance` による consensus fetch は schema 変更の影響を受けるため、MVPでは defensive に欠損を許容
 - 投資助言、株価予測、売買推奨は意図的に対象外

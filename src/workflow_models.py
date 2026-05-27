@@ -184,6 +184,13 @@ class DocumentSection(WorkflowModel):
         return self
 
 
+class DocumentFile(WorkflowModel):
+    path: str = Field(min_length=1, max_length=500)
+    source_type: SourceType = SourceType.MANUAL_UPLOAD
+    document_id: str = Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9_.:-]+$")
+    title: str = Field(min_length=1, max_length=300)
+
+
 class FinancialMetrics(WorkflowModel):
     ticker: str = Field(min_length=1, max_length=15)
     fiscal_period: str = Field(pattern=r"^\d{4}Q[1-4]$")
@@ -234,6 +241,7 @@ class ReviewRequest(WorkflowModel):
     presentation_url: AnyUrl | None = None
     transcript_url: AnyUrl | None = None
     financial_metrics: FinancialMetrics | None = None
+    document_files: list[DocumentFile] = Field(default_factory=list, max_length=20)
     document_sections: list[DocumentSection] = Field(default_factory=list, max_length=200)
     source_refs: list[SourceRef] = Field(default_factory=list, max_length=100)
     include_markdown: bool = True

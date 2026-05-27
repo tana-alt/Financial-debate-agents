@@ -17,8 +17,9 @@ from typing import Any
 import structlog
 import yfinance as yf
 from bs4 import BeautifulSoup
+from pydantic import ValidationError
 
-from .workflow_models import DocumentSection, FinancialMetrics, SourceRef, SourceType
+from .workflow_models import DocumentFile, DocumentSection, FinancialMetrics, SourceRef, SourceType
 
 log = structlog.get_logger()
 
@@ -30,6 +31,170 @@ SECTION_PATTERNS = {
     "segments": re.compile(r"(segment|geographic|product\s+category)", re.I),
     "risk": re.compile(r"(risk\s+factor|forward[- ]looking\s+statement)", re.I),
 }
+
+SUPPORTED_DOCUMENT_FILE_SUFFIXES = {".pdf", ".txt", ".text", ".md"}
+MAX_DOCUMENT_SECTION_CHARS = 8000
+
+
+class DocumentFileValidationError(ValueError):
+    """Raised when a local document file cannot be converted into sections."""
+
+
+def _slug(value: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9_.:-]+", "-", value.strip())
+    slug = re.sub(r"-+", "-", slug).strip("-")
+    return slug or "section"
+
+
+def _normalize_document_text(text: str) -> str:
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _chunk_text(text: str, *, max_chars: int = MAX_DOCUMENT_SECTION_CHARS) -> list[str]:
+    if len(text) <= max_chars:
+        return [text]
+
+    chunks: list[str] = []
+    paragraphs = text.split("\n\n")
+    current = ""
+    for paragraph in paragraphs:
+        candidate = f"{current}\n\n{paragraph}".strip() if current else paragraph
+        if len(candidate) <= max_chars:
+            current = candidate
+            continue
+        if current:
+            chunks.append(current)
+        while len(paragraph) > max_chars:
+            chunks.append(paragraph[:max_chars].strip())
+            paragraph = paragraph[max_chars:].strip()
+        current = paragraph
+    if current:
+        chunks.append(current)
+    return [chunk for chunk in chunks if chunk]
+
+
+def document_files_to_sections(document_files: list[DocumentFile]) -> list[DocumentSection]:
+    """Expand local PDF/text documents into validated workflow sections."""
+    sections: list[DocumentSection] = []
+    for document_file in document_files:
+        path = Path(document_file.path).expanduser()
+        if not path.exists():
+            raise DocumentFileValidationError(f"document file does not exist: {document_file.path}")
+        if not path.is_file():
+            raise DocumentFileValidationError(f"document path is not a file: {document_file.path}")
+
+        suffix = path.suffix.lower()
+        if suffix not in SUPPORTED_DOCUMENT_FILE_SUFFIXES:
+            supported = ", ".join(sorted(SUPPORTED_DOCUMENT_FILE_SUFFIXES))
+            raise DocumentFileValidationError(
+                f"unsupported document file extension for {document_file.path}; supported: {supported}"
+            )
+
+        if suffix == ".pdf":
+            sections.extend(_pdf_file_to_sections(path, document_file))
+        else:
+            sections.extend(_text_file_to_sections(path, document_file))
+
+    if document_files and not sections:
+        raise DocumentFileValidationError("document_files produced no document_sections")
+    return sections
+
+
+def _text_file_to_sections(path: Path, document_file: DocumentFile) -> list[DocumentSection]:
+    try:
+        text = _normalize_document_text(path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as exc:
+        raise DocumentFileValidationError(
+            f"text document must be UTF-8 encoded: {document_file.path}"
+        ) from exc
+    if not text:
+        raise DocumentFileValidationError(f"text document is empty: {document_file.path}")
+
+    sections = []
+    for index, chunk in enumerate(_chunk_text(text), start=1):
+        section_id = _slug(f"{document_file.document_id}:section-{index}")
+        sections.append(
+            _build_document_section(
+                document_file=document_file,
+                section_id=section_id,
+                heading=f"{document_file.title} section {index}",
+                text=chunk,
+            )
+        )
+    return sections
+
+
+def _pdf_file_to_sections(path: Path, document_file: DocumentFile) -> list[DocumentSection]:
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:
+        raise DocumentFileValidationError(
+            "PDF document ingestion requires the 'pypdf' package to be installed"
+        ) from exc
+
+    try:
+        reader = PdfReader(str(path))
+    except Exception as exc:
+        raise DocumentFileValidationError(
+            f"failed to read PDF document: {document_file.path}"
+        ) from exc
+
+    sections = []
+    for page_index, page in enumerate(reader.pages, start=1):
+        page_text = _normalize_document_text(page.extract_text() or "")
+        if not page_text:
+            continue
+        for chunk_index, chunk in enumerate(_chunk_text(page_text), start=1):
+            section_id = _slug(f"{document_file.document_id}:p{page_index}:section-{chunk_index}")
+            sections.append(
+                _build_document_section(
+                    document_file=document_file,
+                    section_id=section_id,
+                    heading=f"{document_file.title} page {page_index}",
+                    text=chunk,
+                    page=page_index,
+                )
+            )
+
+    if not sections:
+        raise DocumentFileValidationError(
+            f"PDF document yielded no extractable text: {document_file.path}"
+        )
+    return sections
+
+
+def _build_document_section(
+    *,
+    document_file: DocumentFile,
+    section_id: str,
+    heading: str,
+    text: str,
+    page: int | None = None,
+) -> DocumentSection:
+    source_ref = SourceRef(
+        source_id=section_id,
+        source_type=document_file.source_type,
+        document_id=document_file.document_id,
+        section_id=section_id,
+        page=page,
+        title=document_file.title,
+    )
+    try:
+        return DocumentSection(
+            section_id=section_id,
+            source_ref=source_ref,
+            heading=heading,
+            text=text,
+            start_page=page,
+            end_page=page,
+        )
+    except ValidationError as exc:
+        raise DocumentFileValidationError(
+            f"document section validation failed for {document_file.path}: {exc}"
+        ) from exc
 
 
 def safe_float(value: Any) -> float | None:
