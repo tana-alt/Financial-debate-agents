@@ -231,10 +231,10 @@ class FakeProvider(LLMProvider):
           "stance": "mixed",
           "summary": "{role} found usable evidence with a counterpoint.",
           "key_evidence": [
-            {self._evidence_json(f"{role}:positive", "positive", positive_source_ref, f"{role} positive evidence supports EPS or FCF improvement.")}
+            {self._evidence_json(f"{role}:positive", "positive", positive_source_ref, f"{role} positive evidence supports EPS or FCF improvement with an 8.0% EPS surprise.")}
           ],
           "counter_evidence": [
-            {self._evidence_json(f"{role}:negative", "negative", negative_source_ref, f"{role} negative evidence keeps the outlook balanced.")}
+            {self._evidence_json(f"{role}:negative", "negative", negative_source_ref, f"{role} negative evidence keeps the outlook balanced with $1.1 billion CapEx pressure.")}
           ],
           "confidence": 0.70,
           "missing_data": [],
@@ -252,8 +252,8 @@ class FakeProvider(LLMProvider):
                     {
                         "evidence_id": "EarningsQualityAnalyst:positive",
                         "polarity": "positive",
-                        "summary": "EPS quality improved.",
-                        "detail": "EPS quality improved.",
+                        "summary": "EPS quality improved with an 8.0% EPS surprise.",
+                        "detail": "EPS quality improved with an 8.0% EPS surprise.",
                         "impact_areas": ["eps"],
                         "source_ref": source_ref,
                         "confidence": 0.70,
@@ -285,8 +285,8 @@ class FakeProvider(LLMProvider):
                     {
                         "evidence_id": "CashFlowRiskAnalyst:negative",
                         "polarity": "negative",
-                        "summary": "CapEx may pressure FCF.",
-                        "detail": "CapEx may pressure FCF.",
+                        "summary": "CapEx may pressure FCF by $1.1 billion.",
+                        "detail": "CapEx may pressure FCF by $1.1 billion.",
                         "impact_areas": ["fcf"],
                         "source_ref": source_ref,
                         "confidence": 0.70,
@@ -323,8 +323,8 @@ class FakeProvider(LLMProvider):
                     {
                         "evidence_id": "EarningsQualityAnalyst:positive",
                         "polarity": "positive",
-                        "summary": "EPS quality improved.",
-                        "detail": "EPS quality improved.",
+                        "summary": "EPS quality improved with an 8.0% EPS surprise.",
+                        "detail": "EPS quality improved with an 8.0% EPS surprise.",
                         "impact_areas": ["eps"],
                         "source_ref": positive_source_ref,
                         "confidence": 0.70,
@@ -334,8 +334,8 @@ class FakeProvider(LLMProvider):
                     {
                         "evidence_id": "CashFlowRiskAnalyst:negative",
                         "polarity": "negative",
-                        "summary": "CapEx may pressure near-term FCF.",
-                        "detail": "CapEx may pressure near-term FCF.",
+                        "summary": "CapEx may pressure near-term FCF by $1.1 billion.",
+                        "detail": "CapEx may pressure near-term FCF by $1.1 billion.",
                         "impact_areas": ["fcf"],
                         "source_ref": negative_source_ref,
                         "confidence": 0.70,
