@@ -17,10 +17,10 @@ from typing import Any, TypeVar
 from pydantic import BaseModel
 
 from .llm import LLMProvider
-from .report_quality_numeric_grounding import validate_numeric_grounding
-from .report_quality_source_inventory import source_inventory_lines
 from .report_quality_evidence_matrix import evidence_matrix_lines
 from .report_quality_guidance import validate_guidance_required
+from .report_quality_numeric_grounding import validate_numeric_grounding
+from .report_quality_source_inventory import source_inventory_lines
 from .workflow_agents import (
     BearAgent,
     BullAgent,
