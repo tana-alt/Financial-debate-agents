@@ -66,4 +66,6 @@ def test_reviews_api_returns_4xx_for_invalid_document_file(monkeypatch):
         api.app.dependency_overrides.clear()
 
     assert response.status_code == 422
-    assert "document file does not exist" in response.json()["detail"]
+    detail = response.json()["detail"]
+    assert detail["code"] == "document_extraction_failed"
+    assert "document file does not exist" in detail["message"]

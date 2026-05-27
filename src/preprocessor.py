@@ -14,11 +14,20 @@ from math import isfinite
 from pathlib import Path
 from typing import Any
 
+import requests
 import structlog
 import yfinance as yf
 from bs4 import BeautifulSoup
 from pydantic import ValidationError
 
+from .errors import (
+    APIConnectionError,
+    APIHTTPStatusError,
+    APIRateLimitError,
+    APITimeoutError,
+    DocumentExtractionError,
+    SECParsingError,
+)
 from .workflow_models import DocumentFile, DocumentSection, FinancialMetrics, SourceRef, SourceType
 
 log = structlog.get_logger()
@@ -36,8 +45,56 @@ SUPPORTED_DOCUMENT_FILE_SUFFIXES = {".pdf", ".txt", ".text", ".md"}
 MAX_DOCUMENT_SECTION_CHARS = 8000
 
 
-class DocumentFileValidationError(ValueError):
+class DocumentFileValidationError(DocumentExtractionError):
     """Raised when a local document file cannot be converted into sections."""
+
+
+def _exception_text(exc: Exception) -> str:
+    return f"{exc.__class__.__module__}.{exc.__class__.__name__}: {exc}".lower()
+
+
+def _upstream_status_code(exc: Exception) -> int | None:
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    if isinstance(status_code, int):
+        return status_code
+    status_code = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+    return status_code if isinstance(status_code, int) else None
+
+
+def _yfinance_error(stage: str, ticker: str, exc: Exception):
+    text = _exception_text(exc)
+    status_code = _upstream_status_code(exc)
+    details = {"ticker": ticker.upper(), "stage": stage}
+
+    if isinstance(exc, requests.Timeout) or "timeout" in text or "timed out" in text:
+        return APITimeoutError(
+            f"yfinance {stage} request timed out for {ticker.upper()}",
+            source="yfinance",
+            details=details,
+        )
+    if status_code == 429 or "rate limit" in text or "too many requests" in text:
+        return APIRateLimitError(
+            f"yfinance {stage} request was rate limited for {ticker.upper()}",
+            source="yfinance",
+            upstream_status_code=status_code,
+            details=details,
+        )
+    if isinstance(exc, requests.ConnectionError) or "connection" in text:
+        return APIConnectionError(
+            f"yfinance {stage} request failed to connect for {ticker.upper()}",
+            source="yfinance",
+            details=details,
+        )
+    if isinstance(exc, requests.HTTPError) or status_code is not None:
+        return APIHTTPStatusError(
+            f"yfinance {stage} request failed with HTTP status for {ticker.upper()}",
+            source="yfinance",
+            upstream_status_code=status_code,
+            retryable=status_code is None or status_code >= 500,
+            details={**details, "error_type": exc.__class__.__name__},
+        )
+    return None
 
 
 def _slug(value: str) -> str:
@@ -110,6 +167,10 @@ def _text_file_to_sections(path: Path, document_file: DocumentFile) -> list[Docu
         raise DocumentFileValidationError(
             f"text document must be UTF-8 encoded: {document_file.path}"
         ) from exc
+    except OSError as exc:
+        raise DocumentFileValidationError(
+            f"failed to read text document: {document_file.path}"
+        ) from exc
     if not text:
         raise DocumentFileValidationError(f"text document is empty: {document_file.path}")
 
@@ -142,9 +203,21 @@ def _pdf_file_to_sections(path: Path, document_file: DocumentFile) -> list[Docum
             f"failed to read PDF document: {document_file.path}"
         ) from exc
 
+    try:
+        pages = list(reader.pages)
+    except Exception as exc:
+        raise DocumentFileValidationError(
+            f"failed to read PDF pages: {document_file.path}"
+        ) from exc
+
     sections = []
-    for page_index, page in enumerate(reader.pages, start=1):
-        page_text = _normalize_document_text(page.extract_text() or "")
+    for page_index, page in enumerate(pages, start=1):
+        try:
+            page_text = _normalize_document_text(page.extract_text() or "")
+        except Exception as exc:
+            raise DocumentFileValidationError(
+                f"failed to extract text from PDF document: {document_file.path} page {page_index}"
+            ) from exc
         if not page_text:
             continue
         for chunk_index, chunk in enumerate(_chunk_text(page_text), start=1):
@@ -268,8 +341,6 @@ def fetch_filing_html(url: str) -> str:
     iteration cheap and deterministic (dev/prod parity, factor X)."""
     import hashlib
 
-    import requests
-
     cache_dir = Path("samples/cache")
     cache_dir.mkdir(parents=True, exist_ok=True)
     key = hashlib.sha1(url.encode()).hexdigest()[:12]
@@ -280,8 +351,34 @@ def fetch_filing_html(url: str) -> str:
         return cache_path.read_text(encoding="utf-8")
 
     ua = os.getenv("SEC_USER_AGENT", "earnings-debate-agent contact@example.com")
-    r = requests.get(url, headers={"User-Agent": ua}, timeout=30)
-    r.raise_for_status()
+    try:
+        r = requests.get(url, headers={"User-Agent": ua}, timeout=30)
+    except requests.Timeout as exc:
+        raise APITimeoutError(f"SEC filing request timed out: {url}", source="sec") from exc
+    except requests.ConnectionError as exc:
+        raise APIConnectionError(f"SEC filing request failed to connect: {url}", source="sec") from exc
+    except requests.RequestException as exc:
+        raise APIHTTPStatusError(
+            f"SEC filing request failed before a response was received: {url}",
+            source="sec",
+            details={"error_type": exc.__class__.__name__},
+        ) from exc
+
+    if r.status_code == 429:
+        raise APIRateLimitError(
+            f"SEC filing request was rate limited: {url}",
+            source="sec",
+            upstream_status_code=r.status_code,
+        )
+    try:
+        r.raise_for_status()
+    except requests.HTTPError as exc:
+        raise APIHTTPStatusError(
+            f"SEC filing request failed with HTTP {r.status_code}: {url}",
+            source="sec",
+            upstream_status_code=r.status_code,
+            retryable=500 <= r.status_code < 600,
+        ) from exc
     cache_path.write_text(r.text, encoding="utf-8")
     log.info("filing.fetched", url=url, bytes=len(r.text))
     return r.text
@@ -334,6 +431,9 @@ def segment_filing(html: str, url: str | None = None) -> list[DocumentSection]:
             )
         )
 
+    if not result:
+        raise SECParsingError("SEC filing yielded no extractable document sections", source="sec")
+
     log.info("filing.segmented", sections={s.heading: len(s.text) for s in result})
     return result
 
@@ -358,16 +458,22 @@ def fetch_consensus(ticker: str, fiscal_period: str) -> FinancialMetrics:
             eps_actual = safe_float(row.get("Reported EPS"))
             eps_consensus = safe_float(row.get("EPS Estimate"))
             eps_surprise_pct = safe_float(row.get("Surprise(%)"))
-    except Exception as e:
-        log.warning("yfinance.eps_fetch_failed", error=str(e))
+    except Exception as exc:
+        log.warning("yfinance.eps_fetch_failed", error=str(exc))
+        api_error = _yfinance_error("earnings_dates", ticker, exc)
+        if api_error is not None:
+            raise api_error from exc
 
     try:
         quarterly_financials = t.quarterly_financials
         if quarterly_financials is not None and not quarterly_financials.empty:
             if "Total Revenue" in quarterly_financials.index:
                 revenue_actual = safe_float(quarterly_financials.loc["Total Revenue"].iloc[0])
-    except Exception as e:
-        log.warning("yfinance.revenue_fetch_failed", error=str(e))
+    except Exception as exc:
+        log.warning("yfinance.revenue_fetch_failed", error=str(exc))
+        api_error = _yfinance_error("quarterly_financials", ticker, exc)
+        if api_error is not None:
+            raise api_error from exc
 
     return build_financial_metrics(
         ticker=ticker,
