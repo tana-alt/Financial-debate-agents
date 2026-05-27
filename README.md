@@ -1,225 +1,415 @@
-# 参考文献まとめ: Agent設計と実装時の判断基準
+# Earnings Debate Agent
 
-このREADMEは、AGENTS.mdで指定された参考文献の要点を整理し、今回の実装で意識すべき事項と守るべきものをまとめたものです。
+米国株の四半期決算レビューで行う「財務数値の確認」「決算資料の読解」「Bull / Bear 両面の論点整理」「最終レポート化」を、LLM multi-agent workflow として自動化するシステムです。
 
-既存のプロジェクト説明ではなく、設計原則のメモとして扱います。
+提出リポジトリ: https://github.com/tana-alt/Financial-analisys-teams
 
-## 参考文献
-
-AGENTS.mdの短縮URLは、次の文献へリダイレクトされます。
-
-| AGENTS.mdのURL | 参照先 | 主題 |
-| --- | --- | --- |
-| https://lstep.app/F1mQlQB | https://www.anthropic.com/engineering/building-effective-agents | 効果的なAgentic Systemの作り方 |
-| https://lstep.app/R3cZy8u | https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents | AgentのContext Engineering |
-| https://lstep.app/SwKfiMq | https://12factor.net/ | Twelve-Factor App |
-| https://lstep.app/e6YVtQS | https://basecamp.com/shapeup | Shape Up |
+> This project generates an earnings-analysis artifact. It does not provide stock-price forecasts, target prices, trading recommendations, or investment advice.
 
 ---
 
-## 1. Building Effective Agents
+## 1. 概要
 
-Anthropicの記事は、LLMエージェントを複雑なフレームワークで作るのではなく、単純で組み合わせ可能なパターンとして設計することを重視している。
+決算直後のレビューでは、EPS surprise や revenue growth だけでなく、FCF、CapEx、guidance、経営陣コメント、反対根拠まで短時間で整理する必要があります。
 
-### 中心メッセージ
+このリポジトリでは、その作業を次のような固定 workflow に分解します。
 
-- 最初から複雑なAgentを作らず、まずは最も単純な解法を選ぶ。
-- Agentic Systemは、事前に決めた処理経路を進む `workflow` と、LLMが手順やツール利用を動的に決める `agent` に分けて考える。
-- 多くの実務では、完全自律Agentよりも、コードで制御されたworkflowの方が予測可能でデバッグしやすい。
-- フレームワークは便利だが、プロンプト、入力、出力、ツール仕様を見えにくくする危険がある。
-- Agentic Systemはレイテンシとコストを増やすため、性能向上が明確な場合だけ複雑化する。
+```text
+ReviewRequest
+  ├─ financial_metrics
+  ├─ document_sections
+  └─ filing_url optional
 
-### 主要パターン
+        ↓
 
-| パターン | 要点 | 使う場面 |
-| --- | --- | --- |
-| Prompt Chaining | タスクを順番のある小さなLLM呼び出しへ分解する | 各ステップの入出力を検証したい場合 |
-| Routing | 入力を分類して専門処理へ振り分ける | 入力カテゴリごとに最適な処理が異なる場合 |
-| Parallelization | 独立した観点を並列に処理し、結果を統合する | 複数視点の分析や安全性チェック |
-| Orchestrator-Workers | 中央のOrchestratorが作業を分解し、Workerの結果を統合する | 複数の専門Agentをまとめる場合 |
-| Evaluator-Optimizer | 生成結果を評価し、改善するループを作る | 明確な評価基準があり、反復改善が効く場合 |
+Data Ingestion / Normalization
+  - 財務指標を正規化
+  - EPS / revenue surprise を計算
+  - filing HTML を必要に応じて section 分割
 
-### 実装時の含意
+        ↓
 
-- Agentごとに責務を分け、入力と出力を明示する。
-- すべてを1つの巨大なAgentに任せない。
-- 各Agentの出力は次工程に渡す前に検証する。
-- 完全自律にする場合は、停止条件、ログ、サンドボックス、テスト、ガードレールを置く。
-- 「Agentが賢くやってくれる」ではなく、「コードで制御できる範囲を明確にする」ことを優先する。
+Financial Agents
+  - EPSQualityAnalyst
+  - ProfitabilityAnalyst
+  - CashFlowFcfAnalyst
+  - BalanceSheetRiskAnalyst
+
+        ↓
+
+Presentation Agents
+  - ManagementIntentAnalyst
+  - GuidanceAnalyst
+
+        ↓
+
+Evidence Aggregation
+  - positive evidence
+  - negative evidence
+  - risk evidence
+  - source traceability check
+
+        ↓
+
+Debate Agents
+  - BullAgent
+  - BearAgent
+
+        ↓
+
+JudgeAgent
+  - good / neutral / bad
+  - confidence
+  - EPS outlook
+  - FCF outlook
+
+        ↓
+
+MarkdownRenderer
+  - final earnings review report
+```
 
 ---
 
-## 2. Effective Context Engineering for AI Agents
+## 2. なぜこのタスクを自動化したのか
 
-Anthropicの記事は、Agentの性能を決めるのはプロンプト文面だけではなく、LLMへ渡す全コンテキストの設計だと説明している。
+自分が企業決算を読むとき、手作業では次の問題が起きやすいです。
 
-### 中心メッセージ
+- EPS surprise や revenue growth のような目立つ数値だけで判断してしまう
+- FCF や CapEx のような将来キャッシュフローに関わる論点を後回しにしやすい
+- 決算説明資料、10-Q、経営陣コメント、guidance を読む順番が毎回ぶれる
+- 良い材料だけ、または悪い材料だけを拾ってしまい、反対根拠の確認が弱くなる
+- 最後に Markdown レポートへ整理するまでに時間がかかる
 
-- コンテキストは有限資源であり、長ければ長いほど良いわけではない。
-- LLMには注意予算があり、不要なトークンが増えると重要情報への集中が弱くなる。
-- Context Engineeringとは、system prompt、ツール仕様、外部データ、履歴、メモリなど、推論時にLLMへ入る情報全体を設計すること。
-- 良いコンテキストとは、目的達成に必要な最小限の高信号トークンで構成される。
+そのため、数値計算は Python 側で決定的に処理し、LLM には「解釈」「反証」「要約」「論点整理」を担当させる構成にしました。
 
-### 重要な考え方
+このシステムの目的は、投資判断を自動化することではありません。目的は、決算情報を構造化し、毎回同じ観点で、根拠と反対根拠を含むレビュー資料を短時間で作ることです。
 
-| 観点 | 要点 |
+---
+
+## 3. 自動化する業務
+
+| 手作業の業務 | 自動化後 |
 | --- | --- |
-| Prompt Engineeringとの違い | Prompt Engineeringは指示文の作り方、Context Engineeringは推論時に入る情報全体の設計 |
-| Attention Budget | 不要な履歴、重複データ、長すぎる資料はLLMの判断を鈍らせる |
-| Compaction | 長い履歴やツール結果は、必要な情報だけに圧縮して渡す |
-| Structured Note-Taking | 長期作業では、会話履歴ではなく構造化メモに状態を保存する |
-| Sub-Agent Architecture | 専門Agentに広い探索を任せ、親Agentには要約だけを返す |
-
-### 実装時の含意
-
-- 生の決算資料全文や討論ログ全文を全Agentに配らない。
-- Agentごとに必要なセクションだけを渡す。
-- 過去ログはそのまま再注入せず、要約・争点・構造化データに圧縮する。
-- 重要な数値はLLMに探させず、コード側で抽出・計算して構造化して渡す。
-- Sub-Agentを使う場合は、探索過程ではなく、最終的な要点、根拠、未解決点だけを返させる。
+| EPS / revenue surprise を確認する | `FinancialMetrics` と preprocessor で正規化・計算 |
+| 決算資料の該当箇所を探す | filing / document sections を semantic chunk として扱う |
+| EPS、P&L、CFS、BSを別々に読む | Specialist agents が観点別に分析 |
+| 経営陣コメントと guidance を読む | Presentation agents が文脈を分析 |
+| Bull / Bear 両面を整理する | Debate agents が positive / negative evidence から主張を作成 |
+| 最終判断を書く | JudgeAgent が good / neutral / bad と理由を出力 |
+| レポートを整形する | MarkdownRenderer が決定的に整形 |
 
 ---
 
-## 3. The Twelve-Factor App
+## 4. 設計思想
 
-Twelve-Factor Appは、アプリケーションを移植可能で保守しやすく、環境差分に強くするための原則である。Webサービス向けの方法論だが、CLIやAgentシステムにも応用できる。
+課題指定の参考文献を、次のように実装へ反映しています。
 
-### 12の原則
-
-| Factor | 要点 |
+| 参考文献 | 設計への反映 |
 | --- | --- |
-| I. Codebase | 1つのコードベースをバージョン管理し、複数環境へ展開する |
-| II. Dependencies | 依存関係を明示し、環境に暗黙依存しない |
-| III. Config | 設定はコードに埋め込まず、環境変数で管理する |
-| IV. Backing Services | 外部サービスを差し替え可能なリソースとして扱う |
-| V. Build, Release, Run | ビルド、リリース、実行を分離する |
-| VI. Processes | 実行プロセスはステートレスにする |
-| VII. Port Binding | サービスは自分で待ち受けポートを公開する |
-| VIII. Concurrency | プロセス単位で水平スケールできるようにする |
-| IX. Disposability | 起動と終了を速くし、堅牢に停止できるようにする |
-| X. Dev/Prod Parity | 開発、ステージング、本番の差分を小さくする |
-| XI. Logs | ログをイベントストリームとして扱う |
-| XII. Admin Processes | 管理タスクは一回限りのプロセスとして実行する |
+| [Building Effective Agents](https://lstep.app/F1mQlQB) | 完全自律 agent ではなく、明示的な固定 workflow と specialist agents を組み合わせる |
+| [Effective Context Engineering for AI Agents](https://lstep.app/R3cZy8u) | 全文を agent に渡さず、agent ごとに必要な context keys だけを渡す |
+| [The Twelve-Factor App](https://lstep.app/SwKfiMq) | API key、model、log level、SEC user-agent を環境変数で管理する |
+| [Shape Up](https://lstep.app/e6YVtQS) | MVP の範囲を「決算レビューの構造化とレポート生成」に限定し、株価予測や自動売買は No-Go とする |
 
-### 実装時の含意
+### 4.1 Workflow-first
 
-- API key、モデル名、User-Agent、対象tickerなどは環境変数で管理する。
-- 依存関係は `pyproject.toml` などに明示し、グローバル環境に依存しない。
-- 外部API、LLM Provider、データ取得先は差し替え可能な境界を持たせる。
-- 実行ごとの状態はプロセス内部に残さず、必要な成果物だけファイルに保存する。
-- ログは後から追跡できる形で標準出力へ出す。
-- テストやサンプル入力を用意し、開発環境と評価環境の差を小さくする。
+LLM が自由に手順を決める完全自律型ではなく、以下の順序をコードで固定しています。
 
----
+```text
+Data ingestion
+→ Financial agents
+→ Presentation agents
+→ Evidence aggregation
+→ Debate
+→ Judge
+→ Markdown rendering
+```
 
-## 4. Shape Up
+これにより、失敗箇所の特定、テスト、再現性の確保がしやすくなります。
 
-Shape Upは、作る前に問題、制約、スコープ、リスクを形づくり、決めた時間内で重要な成果を出すための開発方法論である。
+### 4.2 Context Engineering
 
-### 中心メッセージ
+Agent には必要な context だけを渡します。
 
-- 先に `Appetite`、つまり投入する時間と労力の上限を決める。
-- 固定するのは時間であり、スコープは調整する。
-- 着手前に、問題、解法の輪郭、リスク、やらないことを明確にする。
-- 仕様を細かく決めすぎず、実装者が判断できる余地を残す。
-- スコープが膨らんだら期間を延ばすのではなく、削る。
+例:
 
-### 重要な概念
+- `EPSQualityAnalyst` には EPS metrics と EPS sections を渡す
+- `CashFlowFcfAnalyst` には cash flow / capex / risk sections を渡す
+- `JudgeAgent` には validated AnalysisBrief、BullCase、BearCase だけを渡す
 
-| 概念 | 要点 |
-| --- | --- |
-| Shaping | 作る前に、問題と解法の境界を十分に形づくる |
-| Rough / Solved / Bounded | 形は粗く、重要な問題は解かれており、範囲は bounded であるべき |
-| Appetite | どれだけ時間をかけるかを先に決める |
-| Fixed Time, Variable Scope | 期間を固定し、スコープを調整する |
-| Rabbit Holes | 深掘りしすぎる危険な領域を事前に見つける |
-| No-Gos | 今回やらないことを明示する |
-| Scopes | 作業を意味のあるまとまりに分ける |
-| Decide When to Stop | 完璧さではなく、目的に対して十分かで止める |
+生の filing 全文や無関係な metrics は、原則として各 agent に渡しません。
 
-### 実装時の含意
+### 4.3 Structured Output
 
-- 今回の提出で必要なことと、将来やればよいことを分ける。
-- Web UI、多銘柄対応、自動売買、過度なAgent追加など、評価対象外の機能に逃げない。
-- 完璧なデータ取得よりも、検証可能な最小構成を優先する。
-- 追加機能は「なぜ今必要か」を説明できるものだけにする。
-- テスト可能な単位で1つずつ完成させる。
+LLM の出力は自由文として信用せず、Pydantic model で検証します。
+
+- 未定義 field を拒否
+- confidence の範囲を検証
+- `good / neutral / bad` の label を enum で制限
+- positive evidence / negative evidence を必須化
+- source reference を必須化
+- investment advice ではないことを contract に含める
+
+### 4.4 Scope Control
+
+この提出でやらないことを明確にしています。
+
+- 株価予測
+- 目標株価の算出
+- 売買推奨
+- 自動売買
+- ポートフォリオ最適化
+- LLM による財務指標の直接計算
 
 ---
 
-## 今回意識すべき事項
+## 5. 実装済み機能
 
-AGENTS.mdの要点と参考文献を合わせると、今回の実装で意識すべきことは次の通り。
-
-### 1. Agentの影響範囲を分離する
-
-- Agentごとに役割、入力、出力を分ける。
-- 1つのAgentに全資料、全履歴、全判断を渡さない。
-- Agent間のやり取りは、生ログではなく要約済みの争点や構造化データにする。
-- 新しいAgentを追加するときは、既存Agentの責務を侵食しないか確認する。
-- コード変更時の副作用を抑えるため、各Agentの境界を明確にする。
-
-### 2. 関数型を主軸にLLM出力を管理する
-
-- 財務計算、文字列整形、HTML分割、サプライズ率計算は通常のPython関数で行う。
-- LLMには計算させず、計算済みの構造化データを渡す。
-- 可能な限り、入力が同じなら出力も同じになる純粋関数に寄せる。
-- 副作用は外部取得、LLM呼び出し、ファイル出力など必要な場所に限定する。
-- 純粋関数はpytestで直接テストする。
-
-### 3. LLM出力はPydanticで静的にチェックする
-
-- LLMの自由形式テキストを内部データとして信頼しない。
-- LLMにはJSONを返させ、Pydanticモデルで検証する。
-- 未定義フィールド、空の根拠、範囲外のconfidence、不正なlabelを拒否する。
-- 検証済みモデルだけを次工程やレポート生成へ渡す。
-- 出力スキーマはAgent間の契約として扱う。
-
-### 4. Contextを増やしすぎない
-
-- 長い資料をそのまま渡さない。
-- 必要なセクションだけをAgentへ渡す。
-- 2巡目以降は全文履歴ではなく、要約、争点、未解決点を渡す。
-- 数値、根拠、懸念、反対意見は構造化して扱う。
-- コンテキストは「多いほど良い」ではなく「少なく高信号」が原則。
-
-### 5. スコープを固定する
-
-- 今回必要な提出要件を優先する。
-- 投資助言、株価予測、売買推奨、自動売買には踏み込まない。
-- Agentの数を増やす前に、既存Agentの責務と出力契約を安定させる。
-- 実装済みの事実と、今後の構想をREADMEやレポートで混ぜない。
-- 完璧な網羅性より、検証可能で説明可能な設計を優先する。
+- FastAPI endpoint: `POST /reviews`
+- CLI:
+  - `earnings-debate serve`
+  - `earnings-debate run`
+- LLM provider abstraction:
+  - Anthropic
+  - OpenAI
+- Financial metrics normalization
+- Filing HTML segmentation
+- Specialist agents
+- Bull / Bear debate agents
+- Judge agent
+- Markdown report renderer
+- Pydantic contracts
+- Source reference validation
+- pytest による contract / agent / workflow / API tests
 
 ---
 
-## 守るべきもの
+## 6. セットアップ
 
-今回の開発では、次のルールを守る。
+### 6.1 Install
 
-- Agentは責務ごとに分け、影響範囲を小さくする。
-- LLMの出力は必ずPydanticで検証する。
-- LLMに計算を任せず、計算はPython関数で行う。
-- 外部APIの値はNaN、欠損、不正型を考慮して受け取る。
-- 中間データはJSONやPydanticモデルとして扱い、自由文を契約にしない。
-- テストではLLMの賢さではなく、スキーマ、計算、分割、拒否条件を確認する。
-- 参考文献の主張と実装上の判断を対応づけて説明できるようにする。
-- 「未実装だが構想として書いたもの」と「実装済みのもの」を混同しない。
-- 売買判断や投資助言として読める表現を避ける。
-- スコープが膨らんだら、期間を延ばすのではなく削る。
+```bash
+python -m venv .venv
+source .venv/bin/activate
+
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+```
+
+### 6.2 Environment variables
+
+```bash
+cp .env.example .env
+```
+
+`.env` に少なくとも一つの LLM API key を設定します。
+
+```bash
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=...
+
+# or
+LLM_PROVIDER=openai
+OPENAI_API_KEY=...
+```
+
+SEC filing を取得する場合は、SEC user-agent も設定します。
+
+```bash
+SEC_USER_AGENT="Your Name your.email@example.com"
+```
 
 ---
 
-## 実装レビュー用チェックリスト
+## 7. テスト
 
-コードを変更する前後で、次を確認する。
+API key なしで contract / workflow tests を実行できます。
 
-- [ ] その変更は今回の提出要件に必要か
-- [ ] 新しい責務が既存Agentへ混ざっていないか
-- [ ] 入力データはPydanticモデルで表現できているか
-- [ ] LLM出力を自由文のまま次工程へ渡していないか
-- [ ] 計算をLLMではなくPython関数で行っているか
-- [ ] 副作用のある処理が必要な場所に限定されているか
-- [ ] 追加したロジックにpytestで確認できる契約があるか
-- [ ] READMEに実装済みと未実装を混ぜて書いていないか
-- [ ] 投資助言、売買推奨、株価予測に踏み込んでいないか
+```bash
+pytest
+```
+
+テストでは fake LLM を使い、外部 API fetch に依存せず、以下を検証します。
+
+- Pydantic contract が不正値を拒否すること
+- LLM 出力が JSON として parse / validate されること
+- agent ごとの context routing が守られること
+- workflow が決まった順序で実行されること
+- `/reviews` endpoint が workflow に委譲すること
+- Markdown report が生成されること
+
+---
+
+## 8. 実行方法
+
+### 8.1 API server
+
+```bash
+earnings-debate serve --host 127.0.0.1 --port 8000
+```
+
+### 8.2 CLIからレビューを実行
+
+別ターミナルで実行します。
+
+```bash
+earnings-debate run \
+  --api-url http://127.0.0.1:8000 \
+  --input-json samples/request.example.json \
+  --out outputs
+```
+
+成功すると、以下のファイルが生成されます。
+
+```text
+outputs/sample-nvda-2025q3/
+  ├─ workflow_result.json
+  └─ report.md
+```
+
+### 8.3 API request
+
+```bash
+curl -X POST http://127.0.0.1:8000/reviews \
+  -H "Content-Type: application/json" \
+  -d @samples/request.example.json
+```
+
+---
+
+## 9. 入力例
+
+`samples/request.example.json` は、外部 financial API や SEC fetch に依存せずに動作確認するための fixture input です。
+
+主な入力は次の通りです。
+
+```json
+{
+  "request_id": "sample-nvda-2025q3",
+  "ticker": "NVDA",
+  "fiscal_period": "2025Q3",
+  "financial_metrics": {
+    "eps": 0.81,
+    "eps_consensus": 0.75,
+    "eps_surprise_pct": 8.0,
+    "revenue": 35000000000,
+    "revenue_consensus": 33000000000,
+    "revenue_surprise_pct": 6.06,
+    "free_cash_flow": 12000000000,
+    "capex": 3000000000
+  },
+  "document_sections": [
+    {
+      "section_id": "eps",
+      "heading": "EPS",
+      "text": "Diluted EPS exceeded consensus..."
+    }
+  ]
+}
+```
+
+---
+
+## 10. 出力例
+
+出力は Markdown report です。
+
+```markdown
+# Earnings Review: NVDA 2025Q3
+
+## Verdict
+
+Good
+
+Confidence: 0.76
+
+## Summary
+
+EPS quality and the FCF path look constructive, while CapEx and demand concentration remain caveats.
+
+## Positive Evidence
+
+- EPS surprise was positive.
+- Management guidance implies continued revenue growth.
+
+## Negative Evidence
+
+- Elevated investment may delay near-term FCF improvement.
+- Demand concentration remains a risk.
+
+## EPS Outlook
+
+EPS can improve if revenue growth and margin discipline continue.
+
+## FCF Outlook
+
+FCF can improve after investment intensity moderates.
+```
+
+---
+
+## 11. Project structure
+
+```text
+.
+├─ src/
+│  ├─ api.py                # FastAPI entry point
+│  ├─ main.py               # CLI wrapper
+│  ├─ workflow.py           # Explicit workflow orchestration
+│  ├─ workflow_agents.py    # LLM agent wrappers
+│  ├─ workflow_models.py    # Pydantic contracts
+│  ├─ preprocessor.py       # Metrics normalization and filing segmentation
+│  ├─ structured.py         # JSON parsing and model validation
+│  └─ llm.py                # Provider abstraction
+├─ tests/
+│  ├─ test_workflow_api.py
+│  ├─ test_workflow_agents.py
+│  ├─ test_workflow_models.py
+│  └─ test_preprocessor.py
+├─ samples/
+│  └─ request.example.json
+├─ outputs/
+│  └─ example/
+│     └─ report.md
+├─ .env.example
+├─ pyproject.toml
+└─ README.md
+```
+
+---
+
+## 12. Limitations
+
+現在の MVP では、評価しやすさと再現性を優先しています。
+
+- `financial_metrics` と `document_sections` を明示的に渡す fixture 実行を推奨
+- `filing_url` からの HTML fetch / segmentation は実装済みだが、実運用では filing 形式差分への追加対応が必要
+- `presentation_url` と `transcript_url` は入力 contract として保持しているが、自動取得処理は将来拡張
+- `yfinance` による consensus fetch は schema 変更の影響を受けるため、MVPでは defensive に欠損を許容
+- 投資助言、株価予測、売買推奨は意図的に対象外
+
+---
+
+## 13. Future work
+
+- SEC filing parser の精度向上
+- earnings presentation / transcript の自動取得
+- source citation の line / page 単位での強化
+- sample company を複数追加
+- review history の比較機能
+- CI 上での coverage report 追加
+
+---
+
+## 14. Submission checklist
+
+- [ ] `README.md` がプロジェクト説明として読める
+- [ ] 背景・動機が明記されている
+- [ ] 参考文献と設計思想の対応が明記されている
+- [ ] 実装済み機能と未実装機能が分かれている
+- [ ] `samples/request.example.json` がある
+- [ ] `outputs/example/report.md` がある
+- [ ] `pytest` が通る
+- [ ] GitHub Actions が通る
+- [ ] 投資助言ではないことが明記されている
