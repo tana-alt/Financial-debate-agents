@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, TypedDict
+
 try:
     from .report_quality_source_timing import source_timing_label
 except Exception:  # pragma: no cover
@@ -15,7 +17,17 @@ def escape_md_table(value: object) -> str:
     return text.replace("\n", " ").replace("|", "\\|").strip() or "—"
 
 
-def _collect_findings(brief) -> list:
+class _SourceInventoryEntry(TypedDict):
+    source_id: object
+    type: str
+    locator: object
+    title: object
+    url: str
+    timing: str
+    used_for: set[str]
+
+
+def _collect_findings(brief: Any) -> list[Any]:
     return [
         getattr(brief, "earnings_quality_finding", None),
         getattr(brief, "cash_flow_risk_finding", None),
@@ -25,7 +37,7 @@ def _collect_findings(brief) -> list:
 
 
 def source_inventory_lines(brief, decision=None) -> list[str]:
-    rows: dict[tuple, dict[str, object]] = {}
+    rows: dict[tuple[object, ...], _SourceInventoryEntry] = {}
     for finding in _collect_findings(brief):
         if finding is None:
             continue
