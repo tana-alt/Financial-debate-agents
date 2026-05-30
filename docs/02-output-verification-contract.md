@@ -1,10 +1,11 @@
 # Output Verification Contract
 
 ## Complete Output
-Every meaningful output states source refs used, changed paths or artifact
-refs, evidence or why none exists, verification attempted, result
-(`passed`, `failed`, `blocked`, `skipped`, or `not_applicable`), unverified
-surfaces, residual risk, and human gate status when relevant.
+Every final, handoff, rework, or write-task output states source refs used,
+changed paths or artifact refs, evidence or why none exists, verification
+attempted, result (`passed`, `failed`, `blocked`, `skipped`, or
+`not_applicable`), unverified surfaces, residual risk, next action, and human gate status when relevant.
+For casual brainstorming, answer directly; do not invent paths, evidence, or checks.
 
 Do not claim verification that did not run. Evidence and verification records
 must stay schema-valid, source-ref based, and free of secrets or runtime
@@ -25,9 +26,8 @@ If a check cannot run, record check name, reason, result state, residual risk,
 and next action.
 
 ## PR Or Handoff Evidence
-PRs, handoffs, and review packets should include intent, scope, changed paths
-or artifacts, verifier results, docs impact, risks, follow-up, and human
-review focus.
+PRs, handoffs, and review packets include intent, scope, changed paths or
+artifacts, verifier results, docs impact, risks, follow-up, and review focus.
 
 For write work, include branch, worktree, base ref, changed paths,
 allowed-write-target check, and conflict-check status when applicable. For side

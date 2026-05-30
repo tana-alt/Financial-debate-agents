@@ -1,6 +1,6 @@
 ---
 name: deploy-readiness
-description: "Use when changing deployment, Docker, CI/CD, environment variables, build output, runtime config, health checks, or release process."
+description: "Use when deployment-facing behavior changes: Docker or runtime packaging, CI/CD release workflows, environment/config contracts, build artifacts, health checks, rollback, or production startup."
 ---
 
 
@@ -8,13 +8,32 @@ description: "Use when changing deployment, Docker, CI/CD, environment variables
 
 Prevent deployment regressions caused by configuration, packaging, runtime, or release-process changes.
 
+## Effect
+
+When this skill fires, turn deployment-impacting edits into an explicit
+readiness check: identify the runtime surface changed, verify the build/startup
+path, surface required config, and state the rollback or mitigation path for
+risky changes.
+
 ## Use when
 
 - Dockerfile, CI/CD, deployment scripts, env vars, or runtime config change.
-- GitHub Actions or CI checks that affect build, test, release, or deployment
+- CI/CD workflows that package, publish, release, deploy, or gate production
   readiness change.
 - A build or production startup behavior changes.
 - Health checks, rollback, monitoring, or release commands are touched.
+
+## Do not use when
+
+- CI/test/lint workflow edits do not affect release, deploy, packaging,
+  artifacts, permissions, secrets, or production gates; use `release-check` if
+  verification breadth is the main concern.
+- Application logic changes do not alter runtime config, startup, health,
+  packaging, or deployment behavior.
+- The main risk is secret handling, token scope, auth, or untrusted input; use
+  `security-check`, adding this skill only if deployment behavior also changes.
+- Current vendor/platform syntax is needed; use `doc-lookup` for official docs
+  rather than embedding provider-specific guidance here.
 
 ## Success conditions
 
@@ -44,9 +63,17 @@ Use this thin mode only when CI remains part of release or deploy readiness.
 - Do not include dev dependencies in production artifacts unless necessary.
 - Do not change deployment policy during unrelated feature work.
 
+## Stop guidance
+
+Stop and ask before proceeding when a change would publish, deploy, rotate
+secrets, alter production infrastructure, broaden workflow permissions, or make
+an irreversible release-process change.
+
 ## Output
 
+- Changed deployment surface.
 - Deploy risk summary.
-- Commands checked.
-- Env/config changes.
-- Blockers.
+- Build/startup command checked, or why not checked.
+- Env/config contract changes, with no secret values.
+- Health/smoke/rollback status.
+- Blockers and required human review.

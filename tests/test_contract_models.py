@@ -129,6 +129,23 @@ class WorkContractBoundaries(StrictModel):
     risk_flags: list[str]
 
 
+class DesignGate(StrictModel):
+    architecture_significance: Literal["none", "local", "significant"]
+    system_design_skill_required: bool
+    reason: str
+
+    @model_validator(mode="after")
+    def design_gate_must_be_consistent(self) -> Self:
+        if self.architecture_significance == "significant":
+            if not self.system_design_skill_required:
+                raise ValueError("significant work requires system-design skill")
+        if self.architecture_significance != "significant" and self.system_design_skill_required:
+            raise ValueError("system-design skill is only required for significant work")
+        if not self.reason.strip():
+            raise ValueError("design_gate reason must be explicit")
+        return self
+
+
 class WorkContractTemplate(StrictModel):
     schema_version: str
     record_type: Literal["work_contract"]
@@ -137,6 +154,7 @@ class WorkContractTemplate(StrictModel):
     intent: dict[str, Any]
     inputs: dict[str, Any]
     boundaries: WorkContractBoundaries
+    design_gate: DesignGate
     outputs: dict[str, Any]
     evidence_and_verification: dict[str, Any]
     continuation: dict[str, Any]
@@ -249,3 +267,23 @@ def test_verification_record_rejects_skipped_check_without_reason() -> None:
 
     with pytest.raises(ValidationError):
         VerificationRecordTemplate.model_validate(data)
+
+
+def test_work_contract_rejects_significant_design_without_skill() -> None:
+    data = load_yaml("templates/work-contract.yaml")
+    design_gate = cast(dict[str, Any], data["design_gate"])
+    design_gate["architecture_significance"] = "significant"
+    design_gate["system_design_skill_required"] = False
+
+    with pytest.raises(ValidationError):
+        WorkContractTemplate.model_validate(data)
+
+
+def test_work_contract_rejects_non_significant_design_with_skill() -> None:
+    data = load_yaml("templates/work-contract.yaml")
+    design_gate = cast(dict[str, Any], data["design_gate"])
+    design_gate["architecture_significance"] = "local"
+    design_gate["system_design_skill_required"] = True
+
+    with pytest.raises(ValidationError):
+        WorkContractTemplate.model_validate(data)

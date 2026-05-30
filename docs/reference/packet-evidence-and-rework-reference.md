@@ -7,9 +7,47 @@ created_at: 2026-05-06
 
 # Packet, Evidence, And Rework Reference
 
-Use this reference when creating or reviewing work contracts, packets, evidence
-records, verification records, and rework records. Keep records small and use
-refs instead of raw bodies or logs.
+Use this reference when creating or reviewing structured work contracts,
+packets, evidence records, verification records, and rework records. Keep
+records small and use refs instead of raw bodies or logs.
+
+## Trigger
+
+Open this reference when:
+
+- a task asks for work-contract, packet, evidence-record, verification-record,
+  or rework-record fields or templates;
+- evidence must separate facts, inferences, decisions, stale or missing refs,
+  residual risk, and next action;
+- a verification or rework result needs record shape, allowed result states, or
+  evidence refs rather than current command selection.
+
+Do not open this reference when:
+
+- the task is a small named-file edit with no packet, record, evidence,
+  verification-record, or rework output;
+- the only need is current verification commands, CI/PR readiness, repo
+  placement, storage boundaries, runtime scope, handoff compatibility, retry
+  behavior, branch/worktree setup, or migration acceptance.
+
+Adjacent references:
+
+- Use `verification-ci-and-pr-reference.md` for current commands, fast/full gate
+  choice, CI/PR readiness, and PR or handoff evidence.
+- Use `repo-boundary-and-storage-reference.md` for storage placement, repo
+  truth surfaces, ignored local state, and durable artifact paths.
+- Use `agent-runtime-and-scope-reference.md` for runtime-supplied scope,
+  handoff compatibility, retry/idempotency, and conceptual parallel lanes.
+- Use `git-worktree-and-branch-reference.md` for concrete branch/worktree
+  setup, changed-path evidence, conflict checks, and PR preparation.
+
+Expected effect after opening:
+
+- Use the right record fields, leave unsupplied identity fields empty or
+  deleted, cite refs instead of raw bodies or logs, separate facts from
+  inferences and decisions, use allowed verification result states, and return
+  rework when context, permission, evidence, verification, or repo-truth
+  alignment is missing.
 
 ## Work Contract Fields
 
@@ -24,6 +62,7 @@ Core fields:
 - `optional_refs`
 - `expected_outputs`
 - `allowed_write_targets`
+- `design_gate`
 - `denied_context`
 - `evidence_required`
 - `verification_required`
@@ -55,6 +94,36 @@ git_scope:
   sibling_branch_refs: []
   conflict_policy: no_overlap
 ```
+
+## Design Gate
+
+Use `design_gate` to decide whether `.agents/skills/system-design/SKILL.md`
+is required before implementation.
+
+Set `architecture_significance` to:
+
+- `none`: no design work needed
+- `local`: local design reasoning is enough
+- `significant`: system-design skill is required
+
+Use `significant` only for material architecture boundaries or high-blast-radius
+behavior: public/external contracts, persistent data ownership, trust
+boundaries, external write paths, queues/workers/schedulers, deployment
+topology, irreversible changes, or material design tradeoffs.
+
+For significant work, output should name:
+
+```yaml
+skill_refs_used:
+  - .agents/skills/system-design/SKILL.md
+```
+
+Use existing `human_gate` rules when significant work also touches public APIs,
+trust boundaries, persistent data, external writes, deployment, security,
+dependencies, CI/CD, release, infrastructure, or irreversible/protected actions.
+
+Return rework when required design inputs, verification, rollback/mitigation, or
+an existing required human gate is missing.
 
 ## Ref Fields
 

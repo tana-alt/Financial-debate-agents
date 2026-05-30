@@ -8,6 +8,13 @@ description: "Use when creating or changing API endpoints, request/response sche
 
 Make API changes explicit and stable before implementation is considered done.
 
+## Effect
+
+When this skill fires, define or verify the externally observable HTTP contract
+before treating implementation as complete. The contract decision should
+constrain handler code, validation, docs/types, tests, and generated artifacts
+where present.
+
 ## Use when
 
 - Adding or changing an API route.
@@ -17,9 +24,24 @@ Make API changes explicit and stable before implementation is considered done.
 - Creating, changing, or reviewing OpenAPI descriptions, generated API clients,
   generated servers, or HTTP API documentation.
 
+## Do not use when
+
+- The change is internal backend logic with no externally observable API
+  contract change; use `backend-implementation`.
+- The change only updates current third-party API usage or framework syntax;
+  use `doc-lookup`.
+- The primary risk is authorization, secrets, unsafe input handling, CORS, CSRF,
+  or webhook trust validation rather than API shape/status/error behavior; use
+  `security-check`.
+- The change is only database schema or migration behavior with no API shape,
+  status, or error impact; use `db-migration`.
+
 ## Success conditions
 
 - Method, path, auth requirement, request schema, response schema, and error shape are clear.
+- Pagination changes define parameters, default and maximum bounds, response envelope, and compatibility or migration path when an existing list shape changes.
+- Webhook contracts define payload, acknowledgement statuses, retry/idempotency semantics, and route unresolved signature or replay validation to `security-check`.
+- Error format changes define stable codes, message and field semantics, status mapping, and compatibility or migration path.
 - Status codes distinguish success, validation errors, auth failures, forbidden access, missing resources, conflicts, and server errors.
 - API behavior matches existing repo conventions.
 - Contract docs, types, or OpenAPI-like references are updated if the repo uses them.
@@ -43,8 +65,16 @@ Use this mode when an OpenAPI file or generated contract is in scope.
 - Do not return unbounded lists.
 - Do not trust client-side validation as the API contract.
 
+## Stop guidance
+
+Stop and clarify before implementation if method/path ownership, auth
+requirement, breaking-change permission, request/response shape, or error format
+is ambiguous.
+
 ## Output
 
-- Contract summary.
-- Files changed.
-- Verification command or reason blocked.
+- Contract summary: method, path, auth, request, response, errors, and
+  pagination/rate-limit/webhook behavior if relevant.
+- Compatibility note: backward-compatible, intentionally breaking, or unknown.
+- Contract artifacts changed or not applicable.
+- Verification command, contract test, generated-client check, or blocked reason.

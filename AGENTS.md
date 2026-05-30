@@ -14,15 +14,15 @@ Do not read the whole repo, all references, all skills, broad logs, archives,
 or unrelated history by default.
 
 ## Open By Need References
-- Runtime and scope detail:
+- Runtime/scheduler-supplied scope, handoff, retry/idempotency, and conceptual parallel-lane boundaries:
   `docs/reference/agent-runtime-and-scope-reference.md`
-- Packets, evidence, verification records, and rework:
+- Open for work-contract/record fields, templates, identity/ref rules, evidence, verification records, and rework:
   `docs/reference/packet-evidence-and-rework-reference.md`
-- Repo folder map, project-scoped Plan/artifact/src placement, and storage detail:
+- Open for any project-scoped Plan/artifact/src placement choice, ignored local state, and storage boundaries:
   `docs/reference/repo-boundary-and-storage-reference.md`
 - Current verification, CI, CD, and PR detail:
   `docs/reference/verification-ci-and-pr-reference.md`
-- Git branch, worktree isolation, and project-scoped worktree setup:
+- Git branch, changed-path evidence, worktree isolation, and project-scoped worktree setup:
   `docs/reference/git-worktree-and-branch-reference.md`
 - Migration note and acceptance checklist:
   `docs/reference/migration-and-acceptance-reference.md`

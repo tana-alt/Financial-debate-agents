@@ -7,8 +7,46 @@ created_at: 2026-05-06
 
 # Agent Runtime And Scope Reference
 
-Use this reference only when resolving scope, invocation boundaries, handoff,
-parallel lanes, or external runtime input.
+Use this reference only when runtime, scope, handoff, or conceptual
+parallel-lane boundaries need detail beyond the active contracts.
+
+## Trigger
+
+Open this reference when:
+
+- a task packet, handoff, scheduler, monitor, selected skill, or external
+  runtime supplies scope and you need to decide what context to open, decline,
+  or request as rework;
+- the task involves handoff compatibility, output-to-input boundaries,
+  idempotent retry, duplicate output prevention, partial generated output, or
+  atomic artifact replacement, even when the retry mentions artifact output or
+  project truth but asks no repo-layout or storage-placement question;
+- parallel lanes need conceptual input, scope, and handoff boundaries before
+  any concrete branch or worktree operation.
+
+Do not open this reference when:
+
+- the task is a small scoped edit with named files and no runtime, handoff,
+  retry, or context-boundary question;
+- the only need is a packet, evidence, verification, or rework record schema;
+- the only need is repo placement, storage, branch/worktree setup, conflict
+  checks, PR evidence, migration acceptance, or verification command choice.
+
+Adjacent references:
+
+- Use `packet-evidence-and-rework-reference.md` for structured work contracts,
+  evidence records, verification records, and rework record fields.
+- Use `git-worktree-and-branch-reference.md` for concrete branch/worktree
+  setup, local-write conflict checks, and PR preparation.
+- Use `repo-boundary-and-storage-reference.md` only for repo layout, durable
+  path placement, ignored local state, and storage-boundary decisions.
+
+Expected effect after opening:
+
+- Keep required context minimal, name any context-expansion reason, decline
+  denied or broad context, return rework or scoped clarification for missing
+  scope, check handoff compatibility, and make retry or generated-output
+  decisions idempotent.
 
 ## Scope Model
 

@@ -8,6 +8,12 @@ description: Use after or during UI changes when accessibility, keyboard behavio
 Use this skill to review or repair UI quality without turning the task into a
 new visual direction.
 
+## Effect
+
+When this skill fires, narrow the work to quality defects in the changed UI
+surface: identify concrete user-facing risks, apply or recommend the smallest
+local fix, and verify the specific route, component, or state affected.
+
 ## Source Hierarchy
 
 1. Project-local design system, components, tokens, and product conventions are
@@ -30,6 +36,16 @@ guideline details matter.
 - Empty, loading, error, permission, and no-results states.
 - Visual polish: alignment, density, contrast, image behavior, and truncation.
 
+## Do Not Use When
+
+- The task is to create a new UI, route, component, or data-wired interaction;
+  use `frontend-implementation`.
+- The task asks for a new visual direction, premium styling, art direction, or
+  broad redesign; use `ui-art-direction`.
+- The task is primarily screenshot/Figma/image-to-code implementation; use the
+  relevant visual-source skill first, then this skill only as a quality pass.
+- The concern is release readiness across non-UI areas; use `release-check`.
+
 ## Constraints
 
 - Do not invent a new design system.
@@ -38,12 +54,30 @@ guideline details matter.
 - Keep findings specific to affected files, components, or routes.
 - When checking accessibility, state whether proof is code review, browser QA,
   automated tooling, or manual keyboard inspection.
+- If the request mixes out-of-scope redesign, new implementation, or
+  release-wide work with local UI quality concerns, route the out-of-scope part
+  and continue only the affected quality-gate surface.
+- If files, routes, or runnable UI needed for proof are unavailable, do not
+  infer pass or fail; mark the proof blocked, list exactly what remains
+  unverified, and recommend only fixes supported by the provided evidence.
+
+## Stop
+
+Stop and route elsewhere when the fix requires a new design system, broad visual
+redirection, product requirements, current external docs, or release-wide
+verification beyond the affected UI surface.
 
 ## Output
 
 Return:
 
 - `verdict`: pass / rework / blocked.
-- `source_basis`: project system / WCAG-WAI / tactical guideline.
-- `findings`: route or file references with minimal fixes.
-- `verification`: command, browser check, or reason not run.
+- `scope_checked`: route, component, viewport, state, or file.
+- `source_basis`: project system / WCAG-WAI / tactical guideline / skill
+  scope-routing rule when routing or blocking out-of-scope work.
+- `findings`: route, component, state, or file references with minimal fixes;
+  use the narrowest known surface when exact files are unavailable.
+- `verification`: code review, command, browser check, keyboard check,
+  automated accessibility check, or reason not run.
+- `residual_risk`: unverified viewport, state, browser, keyboard, or source
+  surfaces.

@@ -23,8 +23,8 @@ Do not invent missing facts, paths, requirements, state, roles, or ownership.
 - If context expands, say why in the output.
 
 ## Write Preconditions
-Before any local write, confirm allowed write targets, current file contents,
-canonical repo root, relevant VCS status, and conflict risk.
+Before any local write, confirm allowed write targets, current contents or
+absence, canonical repo root, relevant VCS status, and conflict risk.
 
 For parallel work, also confirm complete `git_scope`: `base_ref`,
 `merge_target`, allowed write targets, conflict policy, and explicit or
@@ -35,16 +35,16 @@ branches. Parallel agent work must use one branch and one external worktree per
 agent. Do not bypass hooks for agent work.
 
 ## Side Effects
-Classify work before acting: read-only local, local write, external read,
-external write, infra/deploy, secret-bearing, or irreversible/protected.
+Classify work before acting: read-only local, local write, external read/write,
+dependency/tooling, infra/deploy, secret-bearing, or irreversible/protected.
 
-External writes, dependency changes, CI/CD changes, deployment, release, secret
-handling, auth, billing, database migration, infrastructure, and
+External writes, dependency/tooling changes, CI/CD changes, deployment, release,
+secret handling, auth, billing, database migration, infrastructure, and
 security-sensitive work require explicit approval or human gate.
 
-When side effects occur, record command, target surface, gate status, input
-refs, output refs, and verification or rollback note. The canonical human-gate list
-lives in `docs/02-output-verification-contract.md`.
+Do not perform gated work without approval; split approved local work from
+blocked/rework items. Record command, target surface, gate status, input/output refs,
+and verification or rollback note; canonical human-gate list lives in `docs/02-output-verification-contract.md`.
 
 ## Valid Output
 A valid output follows `docs/02-output-verification-contract.md` and states

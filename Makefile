@@ -49,7 +49,7 @@ test:
 	$(UV) run pytest
 
 test-fast:
-	$(UV) run pytest -q tests/test_contract_models.py tests/test_extension_surface_integrity.py
+	$(UV) run pytest -q tests/test_contract_models.py tests/test_extension_surface_integrity.py tests/test_system_design_integrity.py
 
 check-toolchain:
 	@git --version | sed 's/^/ok: /'

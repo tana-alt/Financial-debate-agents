@@ -40,6 +40,11 @@ boundaries:
     - unrelated_project_logs
   risk_flags: []
 
+design_gate:
+  architecture_significance: none
+  system_design_skill_required: false
+  reason: "Why the system-design skill is or is not required."
+
 outputs:
   expected_outputs:
     - "Artifact or change expected from this work."

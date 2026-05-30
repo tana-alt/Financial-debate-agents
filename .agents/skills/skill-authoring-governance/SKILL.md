@@ -1,6 +1,6 @@
 ---
 name: skill-authoring-governance
-description: Use when creating, renaming, merging, deleting, materially revising, or empirically tuning repository-local skills. Enforces Agent Skills frontmatter/path consistency, trigger precision, progressive disclosure, reference boundaries, license/source attribution, index updates, and evidence before accepting skill changes.
+description: Use when creating, renaming, merging, deleting, materially revising, or empirically tuning repository-local skills. Enforces compact skill discovery, frontmatter/path/index consistency, trigger precision, reference boundaries, license/source attribution, evidence, and stop conditions before accepting skill lifecycle changes.
 ---
 
 # Skill Authoring Governance
@@ -8,6 +8,13 @@ description: Use when creating, renaming, merging, deleting, materially revising
 Use this skill for repo-local skill lifecycle changes. Skills are a compact
 discovery and execution layer, not a knowledge store; active repo contracts and
 allowed write targets remain the source of truth.
+
+## Effect
+
+When this skill fires, make skill lifecycle changes smaller, more
+evidence-backed, and easier to accept. Clarify the trigger, non-trigger,
+expected behavior change, overlap risk, required output, and stop conditions
+before recommending or editing a skill.
 
 ## Modes
 
@@ -27,16 +34,22 @@ Required checks:
 - Preserve source and license attribution for imported or derived material.
 - Remove nonexistent sibling-skill references or mark them as external plugin
   routes.
-- Update `.agents/skills/SKILL_INDEX.md` and any relevant `agents/openai.yaml`.
+- Update `.agents/skills/SKILL_INDEX.md` and any relevant agent routing/index
+  files.
 - Run the narrowest structural test that proves discovery still works.
 
-Do not add a new local skill for project-specific, PDF-derived, one-off, or
-narrow stack-specific material. Prefer an existing skill mode, `doc-lookup`, or
-an official plugin when that covers the repeated failure mode.
+## Do Not Use When
+
+- The task only uses an existing skill to do product, backend, frontend, design,
+  security, release, or documentation work.
+- The request is ordinary repo implementation with no skill lifecycle or
+  empirical tuning change.
+- The material is project-specific, one-off, stack-specific, or better handled
+  by `doc-lookup`, an existing local skill, or an official plugin.
 
 ### Empirical Integrity Tuning Mode
 
-Use for the existing `skill-integrity-tuning` workflow: empirically validating
+Use for the `skill-integrity-tuning` workflow: empirically validating
 that an existing skill's description, body, references, and actual outputs align.
 
 Production mode is allowed only when all are true:
@@ -67,6 +80,14 @@ Detailed empirical workflow remains in:
 4. Make the smallest skill edits that satisfy the decision.
 5. Verify directory/frontmatter/index consistency and any mode-specific checks.
 
+## Stop Guidance
+
+Stop and report rework or blocked status when allowed write targets, source
+refs, license/source provenance, directory/frontmatter consistency, or index
+impact cannot be established. For empirical tuning, stop at lightweight
+preflight unless dispatch, fixed scenarios, rubric, and rollback snapshot are
+available.
+
 ## Acceptance Bar
 
 - `SKILL.md` starts with parseable YAML frontmatter containing non-empty
@@ -74,6 +95,7 @@ Detailed empirical workflow remains in:
 - Frontmatter `name` equals the directory name.
 - The skill does not override active docs, contracts, storage rules, human
   gates, or allowed write targets.
+- The description was not broadened solely to increase activation.
 - Imported guidance has attribution, or the imported payload is removed.
 - Retired duplicate skill directories are removed after consolidation.
 - Logs or handoff notes record decisions, commands, verification, and residual
@@ -88,3 +110,7 @@ Return:
 - `changed_paths`: skill, reference, index, and test paths.
 - `verification`: command and result, or blocked reason.
 - `residual_risk`: unresolved overlap, missing docs, or dispatch limits.
+
+For read-only recommendation tasks, return only: description decision, exact
+replacement if needed, body changes, overlap risks, acceptance concerns, and
+whether edits or verification are intentionally skipped.

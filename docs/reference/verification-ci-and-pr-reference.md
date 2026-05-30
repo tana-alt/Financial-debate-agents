@@ -10,6 +10,44 @@ created_at: 2026-05-06
 Use this reference for current verification commands, CI source material, CD
 readiness, PR evidence, and human gates.
 
+## Trigger
+
+Open this reference when:
+
+- choosing current repo-backed verification commands or the smallest useful
+  check sequence for a changed surface;
+- deciding fast versus full gates such as `make check-push`,
+  `make check-foundation`, CI-equivalent checks, or CD readiness checks;
+- preparing PR or handoff evidence that needs verifier results, docs impact,
+  residual risk, unverified surfaces, or human review focus;
+- reporting operational human-gate notes, result states, or CI/CD readiness
+  without changing the canonical active-contract gate rules.
+
+Do not open this reference when:
+
+- the task is only a wording critique, trigger-phrase discussion, small
+  named-file edit, or read-only review with no verification command, CI, PR, or
+  gate decision;
+- the only need is record schema, artifact placement, runtime scope,
+  branch/worktree mechanics, changed-path evidence, or migration acceptance.
+
+Adjacent references:
+
+- Use `packet-evidence-and-rework-reference.md` for work-contract,
+  verification-record, evidence-record, and rework-record fields or templates.
+- Use `git-worktree-and-branch-reference.md` for branch/worktree setup,
+  changed-path evidence, allowed-write-target checks, sibling-conflict checks,
+  and concrete PR preparation mechanics.
+- Use `repo-boundary-and-storage-reference.md` for repo layout, placement, and
+  storage decisions.
+
+Expected effect after opening:
+
+- Choose the narrowest repo-backed verification sequence, widen only when the
+  changed surface or PR/merge readiness requires it, report each check with an
+  allowed result state and reason, and avoid claiming PR, merge, release, or
+  production readiness from insufficient evidence.
+
 ## Verification Posture
 
 Start with the smallest relevant check, then widen only as needed.
@@ -178,6 +216,8 @@ Include:
 - docs impact
 - known risks, unverified surfaces, and follow-up
 - human review focus
+- human gate status, including no direct `main` or `master` push and no merge
+  authority for agents
 
 Evidence should separate observed facts from inference, cite source refs instead
 of memory, avoid secrets, and preserve enough detail for review.

@@ -1,6 +1,6 @@
 ---
 name: figma-design-to-code
-description: Use when implementing repository UI code from a Figma frame, component, selected node, or Figma URL. Requires Figma MCP or equivalent design context access, design context, screenshot, variables/assets when available, project components, and visual parity validation. Does not write to Figma.
+description: Use when implementing repository UI code from a Figma URL, frame, component, selected node, or active Figma selection. Requires Figma design context access, screenshot capture, variables/assets when exposed, project component mapping, and visual parity validation. Does not write to Figma.
 license: Complete terms in LICENSE.txt
 ---
 
@@ -13,9 +13,16 @@ scope; route those to official Figma tools or plugins when installed.
 Source attribution: this replaces the prior Figma implementation skill while
 retaining Figma Developer Terms attribution in `LICENSE.txt`.
 
+## Effect
+
+When this skill fires, implementation should be constrained by Figma evidence:
+design context, screenshot, variables, assets, component metadata, and project
+component mapping. The result should be repository-native code with explicit
+visual parity validation, not a fresh UI concept inspired by the design.
+
 ## Preconditions
 
-- Figma MCP or equivalent design-context access is available.
+- Figma design-context access is available.
 - The user provides a Figma URL, frame/component/node identifier, or an active
   Figma desktop selection exposed through the tool.
 - The project codebase can be inspected so implementation uses local framework,
@@ -24,6 +31,20 @@ retaining Figma Developer Terms attribution in `LICENSE.txt`.
 If design context or screenshot access is unavailable, report `blocked` and ask
 for an exported screenshot/spec or for the Figma tool to be connected. Do not
 guess from a URL alone.
+
+Stop and report `blocked` when the Figma URL/selection is present but design
+context or screenshot access cannot be obtained. Ask for tool access or exported
+design evidence. Do not implement from memory, URL metadata, or guessed layout.
+
+## Do Not Use When
+
+- The task is general UI design or visual polish without Figma source context;
+  use `frontend-implementation`, `ui-art-direction`, or `ui-quality-gate`.
+- The task starts from a screenshot, generated image, mockup image, or visual
+  reference that is not Figma design context; use `img-to-frontend`.
+- The user wants to create, edit, organize, or write back to the Figma canvas;
+  use official Figma tools or plugins when available.
+- The user only needs design critique, not repository code implementation.
 
 ## Workflow
 
@@ -67,7 +88,9 @@ guess from a URL alone.
 
 Return:
 
-- Figma source used: URL/node/selection plus screenshot/context status.
+- Figma source used: URL/node/selection.
+- Evidence fetched: design context, screenshot, variables/assets/components.
 - Files changed.
-- Parity result and any deviations.
+- Component/token mapping summary.
+- Parity result, intentional deviations, and missing-source notes.
 - Verification commands and results.

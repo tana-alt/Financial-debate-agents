@@ -15,6 +15,7 @@ matter in `SKILL.md`.
 
 ## Conditional skills
 
+- `system-design`
 - `tdd-scope`
 - `db-migration`
 - `deploy-readiness`

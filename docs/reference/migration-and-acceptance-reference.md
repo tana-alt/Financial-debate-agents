@@ -7,6 +7,44 @@ created_at: 2026-05-06
 
 # Migration And Acceptance Reference
 
+Use this reference for foundation rebuild audits, migration acceptance, compact
+active-doc and routed-reference goals, preserved-surface checks, and acceptance
+risk notes.
+
+## Trigger
+
+Open this reference when:
+
+- auditing whether the foundation rebuild or migration still satisfies its
+  acceptance goals;
+- checking that `AGENTS.md` stays a compact route map, active docs stay
+  behavioral, and operational detail stays in routed references;
+- assessing preserved repo surfaces or acceptance risks from the migration
+  checklist.
+
+Do not open this reference when:
+
+- the task is a small named-file edit, ordinary implementation change, or
+  routine verification choice with no migration audit or acceptance question;
+- the only need is concrete repo placement, record schema, branch/worktree
+  procedure, current command selection, PR evidence, or runtime scope.
+
+Adjacent references:
+
+- Use `repo-boundary-and-storage-reference.md` for concrete folder maps,
+  durable placement, storage boundaries, unsupported roots, and ignored state.
+- Use `verification-ci-and-pr-reference.md` for current verification commands,
+  fast/full gate choice, result states, CI/CD readiness, and PR evidence.
+- Use `git-worktree-and-branch-reference.md` for branch/worktree setup,
+  changed-path evidence, conflict checks, and protected-branch mechanics.
+
+Expected effect after opening:
+
+- Judge acceptance against the migration note and checklist, keep active docs
+  compact, preserve routed-reference detail, flag acceptance risks and
+  unverified surfaces, and defer concrete placement, command, or Git mechanics
+  to adjacent references.
+
 ## Migration Note
 
 This rebuild reduces routine agent context and moves operational detail into

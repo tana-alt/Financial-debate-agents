@@ -1,6 +1,6 @@
 ---
 name: ui-art-direction
-description: Use when a web page, app surface, prototype, demo, game UI, or component needs premium visual art direction, strong hierarchy, image-led composition, tasteful motion, and avoidance of generic AI-looking design. Ordinary UI implementation still routes to frontend-implementation.
+description: Use when creating or materially redesigning a web page, app surface, prototype, demo, game UI, or component where visual concept, hierarchy, imagery, motion, or domain-fit art direction is a primary success condition. Do not use for routine UI implementation, minor styling polish, Figma implementation, image-first or generated-design-to-code workflows, screenshot-to-code, or post-change quality review.
 license: Complete terms in LICENSE.txt
 ---
 
@@ -14,6 +14,13 @@ Source attribution: this consolidates prior repo-local `frontend-design`,
 `ui-anthropic-frontend-design`, and `ui-openai-frontend-design` guidance. The
 retained imported material is Apache-licensed; see `LICENSE.txt`.
 
+## Effect
+
+When this skill fires, define a visual thesis before coding, choose composition
+and imagery deliberately, and make domain-fit decisions visible in the
+implemented UI. Do not replace ordinary implementation, browser verification, or
+quality-gate review.
+
 ## Working Model
 
 Before building visually led work, write three short notes for yourself:
@@ -24,14 +31,31 @@ Before building visually led work, write three short notes for yourself:
 
 Then implement real UI code. The output should be usable, accessible, and
 consistent with the project architecture, not a static mockup.
+If the user explicitly asks only for an implementation approach or handoff,
+return an art-direction handoff and mark changed files or verification as
+pending rather than claiming implementation.
+Do the same when no editable project surface or runnable UI is available.
 
 ## Routing Boundaries
 
 - Use `frontend-implementation` for ordinary React/Next/UI implementation.
 - Use `figma-design-to-code` for implementation from a Figma frame or node.
 - Use `img-to-frontend` only for explicit image-first concept,
-  screenshot-to-code, generated-design-to-code, or premium visual exploration.
+  screenshot-to-code, generated-design-to-code, or image/generated-reference-led
+  premium visual exploration.
 - Use `ui-quality-gate` when reviewing or repairing UI quality after a change.
+
+## Do Not Use When
+
+- The task is ordinary UI wiring, state, routing, forms, or component
+  implementation.
+- The user supplied a Figma frame or node as the source of truth.
+- The task is screenshot-to-code, generated-design-to-code, or image-first
+  implementation.
+- The task is post-change accessibility, responsive, focus, overflow, or
+  state-quality review.
+- The request is only minor spacing, color, typography, or copy polish inside an
+  existing direction.
 
 ## Art Direction Defaults
 
@@ -66,11 +90,22 @@ consistent with the project architecture, not a static mockup.
   tiles, counters, and dense controls.
 - Verify the result in browser when a local or preview target exists.
 
+## Stop
+
+If the brief lacks a visually led surface or art-direction decision, route to
+`frontend-implementation` or the relevant adjacent skill instead. If visual work
+is complete but quality risks remain, stop art-direction work and route to
+`ui-quality-gate`.
+For route-away responses, name the target skill, boundary reason, verification
+status, and any residual routing risk.
+
 ## Output
 
 Return a concise implementation note with:
 
-- visual thesis used
+- visual thesis actually used
+- key art-direction decisions made
 - changed files
-- verification or screenshot checks
-- known visual risks if browser proof was limited
+- browser or screenshot verification when available
+- remaining visual risks, especially responsive fit, imagery, motion, or
+  brand/domain mismatch

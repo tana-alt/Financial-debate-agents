@@ -10,6 +10,40 @@ created_at: 2026-05-06
 Use this reference for repo layout, storage boundaries, ignored local state,
 skills, plugins, and overlays.
 
+## Trigger
+
+Open this reference when:
+
+- deciding repo layout, documented roots, or durable `Plan/<project_id>/`,
+  `artifact/<project_id>/`, or `src/<project_id>/` placement;
+- assessing storage boundaries, repo truth, ignored local state, overlays,
+  skills/plugins surfaces, unsupported roots, or past-source handling;
+- a task proposes runtime queues, lock ledgers, broad logs, dashboards,
+  `projects/`, plural `apps/`, or plural `artifacts/` as repo storage.
+
+Do not open this reference when:
+
+- the task is a small named-file edit or ordinary implementation change with no
+  placement or storage decision;
+- the only need is record fields, evidence/rework schema, runtime scope,
+  handoff/retry behavior, verification command choice, branch/worktree setup,
+  PR evidence, or migration acceptance.
+
+Adjacent references:
+
+- Use `packet-evidence-and-rework-reference.md` for work-contract fields and
+  evidence, verification, or rework record schemas.
+- Use `agent-runtime-and-scope-reference.md` for runtime-supplied scope,
+  handoff compatibility, retry/idempotency, and conceptual parallel lanes.
+- Use `migration-and-acceptance-reference.md` for foundation rebuild acceptance
+  checks; use this reference for the placement and storage facts inside them.
+
+Expected effect after opening:
+
+- Choose documented project-scoped roots, reject loose `artifact/` files and
+  unsupported new roots, keep runtime/local/secret-bearing state out of repo
+  truth, and cite adjacent references only for their own decisions.
+
 ## README Routes
 
 Read root-specific placement rules before writing durable project files:

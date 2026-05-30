@@ -833,7 +833,8 @@ def test_pytest_collection_is_aggregate_foundation_gate() -> None:
     assert make_target_recipe(makefile, "test") == ["$(UV) run pytest"]
     expected_test_fast = (
         "$(UV) run pytest -q tests/test_contract_models.py "
-        "tests/test_extension_surface_integrity.py"
+        "tests/test_extension_surface_integrity.py "
+        "tests/test_system_design_integrity.py"
     )
     assert make_target_recipe(makefile, "test-fast") == [expected_test_fast]
     assert "test" in make_target_dependencies(makefile, "check-required")

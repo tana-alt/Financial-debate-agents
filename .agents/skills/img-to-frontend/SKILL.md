@@ -1,6 +1,6 @@
 ---
 name: img-to-frontend
-description: "Use only for explicit image-first concept exploration, screenshot-to-code, generated-design-to-code, or premium visual exploration where images are the primary design reference. Do not use for ordinary frontend implementation."
+description: "Use only for explicit image-first frontend workflows: screenshot-to-code, generated-design-to-code, image-led concept selection before coding, or detailed implementation prompts derived from a visual reference. Do not use for ordinary frontend implementation, Figma-sourced designs, UI polish, or text-only art direction."
 ---
 
 # Img to Frontend
@@ -10,6 +10,13 @@ description: "Use only for explicit image-first concept exploration, screenshot-
 Use this skill to run an image-first design-to-code workflow. It must adapt to
 the user's brief, audience, content model, interaction needs, and brand intent
 rather than forcing a fixed category or visual trope.
+
+## Effect
+
+When this skill fires, preserve the selected visual reference as the primary
+source of truth. Translate visible composition, hierarchy, spacing, typography,
+color, media treatment, and responsive behavior into implementation constraints
+before coding, then verify with screenshots against the reference.
 
 The workflow is staged only when the request is explicitly image-first:
 
@@ -36,6 +43,17 @@ Do not use this skill for ordinary frontend implementation, business-logic
 changes, backend features, simple copy edits, or design critique that will not
 lead to generated images, a detailed implementation prompt, or frontend code.
 
+Do not use this skill when:
+
+- The user wants ordinary UI/frontend implementation without an image,
+  screenshot, or generated visual reference.
+- The source of truth is a Figma file or Figma URL; use `figma-design-to-code`.
+- The user wants visual direction, branding, or UI polish without image
+  generation, screenshot replication, or generated-design implementation; use
+  `ui-art-direction`.
+- The task is post-implementation accessibility, overflow, responsive, or
+  interaction QA; use `ui-quality-gate`.
+
 ## Image Reference Gate
 
 Do not force image generation when the user already supplied the reference image,
@@ -53,6 +71,15 @@ Use the smallest image step that matches the request:
 If image generation is requested but unavailable or fails, report that blocker
 and ask whether the user wants text-only fallbacks. Do not silently substitute
 text briefs for an explicitly requested image stage.
+
+## Stop Guidance
+
+- Stop after generating concept options until the user selects one.
+- Stop after writing a prompt-only deliverable unless implementation is
+  explicitly requested.
+- Stop and ask when the selected image/reference is ambiguous.
+- Stop if no image-generation or screenshot/browser verification path is
+  available for a task that requires visual proof.
 
 ## Core Workflow
 
@@ -167,6 +194,18 @@ Final response should include:
 - Files changed.
 - Verification commands and results.
 - Any residual visual risks, especially if screenshot comparison was limited by tooling or missing references.
+
+## Output
+
+For concept exploration, output labeled generated image artifacts with returned
+previews, file paths, or tool artifact references plus brief direction notes,
+then stop for selection. Do not claim images were generated unless an image tool
+returned those artifacts. If image generation is unavailable, state that blocker
+and ask before substituting text-only directions.
+For screenshot/generated-design implementation, output the derived build
+constraints, changed files, verification screenshots/checks, and residual visual
+mismatches. For prompt-only requests, output the implementation prompt and stop
+unless the user asks to code.
 
 ## Quality Bar
 

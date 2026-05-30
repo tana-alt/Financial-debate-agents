@@ -14,6 +14,13 @@ Source attribution: the retired local skill imported Vercel Engineering React
 Best Practices material. This replacement removes the bulk imported payload and
 keeps Vercel guidance only as optional tactical review material.
 
+## Effect
+
+When this skill fires, make the React/Next performance-sensitive choice
+explicit: identify the performance surface, preserve local architecture, check
+official docs for version-sensitive behavior, and verify with the narrowest
+useful evidence available.
+
 ## Workflow
 
 1. Identify React/Next versions, router model, runtime, and whether code runs on
@@ -35,6 +42,17 @@ keeps Vercel guidance only as optional tactical review material.
   handlers.
 - CSS, images, fonts, SVGs, and long-list rendering behavior.
 
+## Do Not Use When
+
+- The task is ordinary React/Next UI implementation without a stated or implied
+  performance-sensitive surface; use `frontend-implementation`.
+- The task is only visual polish, accessibility, focus, responsive overflow, or
+  state-quality review; use `ui-quality-gate`.
+- The task only needs current framework/API facts and no implementation or
+  review decision; use `doc-lookup`.
+- The task is broad release confidence rather than React/Next performance risk;
+  use `release-check`.
+
 ## Constraints
 
 - Do not cargo-cult `memo`, `useMemo`, or `useCallback`.
@@ -46,12 +64,19 @@ keeps Vercel guidance only as optional tactical review material.
 - Treat Vercel tactical guidance as secondary to official React/Next docs and
   repo patterns.
 
+## Stop Guidance
+
+Stop at recommendation-only when measurement would require production traffic,
+unavailable profiling infrastructure, or workload data not present in the task.
+Do not invent benchmark claims without evidence.
+
 ## Output
 
 Return:
 
-- performance surface touched
-- official docs or repo patterns checked
-- change made or recommended
-- verification result
-- residual performance risk if not measured
+- `performance_surface`: boundary, fetching/cache, hydration, bundle, render,
+  list, or responsiveness surface touched
+- `basis`: official docs checked, repo pattern checked, or why not needed
+- `decision`: change made or recommendation
+- `verification`: lint/test/build/browser/perf evidence, or blocked reason
+- `residual_risk`: what remains unmeasured or workload-dependent

@@ -7,8 +7,53 @@ created_at: 2026-05-06
 
 # Git Worktree And Branch Reference
 
-Use this reference only for local writes, branch isolation, parallel agents,
-conflict checks, or PR preparation.
+Use this reference only for concrete Git branch, worktree, changed-path,
+conflict-check, and protected-branch mechanics.
+
+## Trigger
+
+Open this reference when:
+
+- local write work needs branch or worktree isolation, branch naming, worktree
+  creation or validation, or protected branch/worktree policy;
+- parallel `git_scope` must be checked for completeness, or branch/worktree
+  targets must be derived from `work_id`, `lane`, and a short slug;
+- changed-path evidence, allowed-write-target checks, sibling-conflict checks,
+  or concrete PR-prep mechanics require branch/worktree facts.
+
+Do not open this reference when:
+
+- the task is read-only and asks for wording, review, explanation, or planning
+  with no local write, branch, worktree, changed-path, conflict, or PR action;
+- the task only needs conceptual parallel-lane scope or handoff boundaries;
+- the task only needs verification command choice, fast/full gate choice, CI/PR
+  readiness, record templates, evidence schema, repo placement, storage
+  boundaries, or migration acceptance.
+
+Adjacent references:
+
+- Use `agent-runtime-and-scope-reference.md` for conceptual parallel lanes,
+  scope boundaries, handoff compatibility, and retry/idempotency; do not pair it
+  with this reference solely because a concrete local write is in a parallel
+  agent lane.
+- Use `verification-ci-and-pr-reference.md` for verification command choice,
+  fast/full gate choice, CI/PR readiness, result reporting, and human-gate
+  notes beyond concrete branch/worktree mechanics.
+- Use `packet-evidence-and-rework-reference.md` for work-contract,
+  evidence-record, verification-record, and rework-record fields or templates;
+  do not open it solely because Git facts will appear in a handoff evidence
+  list.
+- Use `repo-boundary-and-storage-reference.md` for durable path placement,
+  repo truth surfaces, ignored local state, and storage decisions.
+
+Expected effect after opening:
+
+- Derive or validate owned `agent/*` branch and external worktree targets,
+  require complete `git_scope` or return rework, run local-write preflight from
+  the canonical repo root, check changed paths against allowed write targets,
+  check sibling branch conflicts when refs are supplied, and report branch,
+  worktree, base, merge target, changed paths, conflict status, and protected
+  branch/worktree constraints without adding a record schema unless requested.
 
 ## Required Scope For Parallel Work
 

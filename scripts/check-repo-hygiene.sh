@@ -45,7 +45,9 @@ sensitive_name_tracked="$(
     {
       base = basename($0)
       if ($0 ~ /(^|\/)logs\//) {
-        print $0
+        if ($0 !~ /^Plan\/[^\/]+\/logs\/Plan_N[0-9][0-9][0-9][0-9]\.log\.md$/) {
+          print $0
+        }
       } else if (base ~ /^\.env(\..*)?$/) {
         print $0
       } else if (base ~ /^(\.netrc|\.npmrc|\.pypirc|auth\.json|credentials\.json|cookies\.json|token\.json|id_rsa|id_ed25519)$/) {
