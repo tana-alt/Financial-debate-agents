@@ -87,6 +87,8 @@ def resolve_skill_target(public_role: str, skill_root: Path | None = None) -> Pa
     if root not in path.parents:
         raise SkillAssetError(f"skill path escapes skill root: {relative_path}")
     if not path.is_file():
+        if not skill_root_was_provided:
+            return None
         raise SkillAssetError(f"{public_role} skill target is missing: {path}")
     return path
 

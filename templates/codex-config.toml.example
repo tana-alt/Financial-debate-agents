@@ -1,0 +1,12 @@
+# Merge these MCP server blocks into ~/.codex/config.toml.
+# Keep credentials, tokens, and machine logs out of this repo.
+
+[mcp_servers.serena]
+startup_timeout_sec = 15
+command = "serena"
+args = ["start-mcp-server", "--project-from-cwd", "--context=codex"]
+
+[mcp_servers.context7]
+startup_timeout_sec = 20
+command = "npx"
+args = ["-y", "@upstash/context7-mcp@2.2.5"]

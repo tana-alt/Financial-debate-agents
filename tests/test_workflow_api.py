@@ -17,11 +17,13 @@ from src.workflow_models import (
     SourceType,
 )
 from src.workflow_validation import WorkflowValidationGate
+from tests.test_api_contract import normalized_review_payload
 
 
 class FakeLLM:
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.user_prompts: dict[str, list[str]] = {}
         self._lock = Lock()
 
     def complete(
@@ -47,6 +49,7 @@ class FakeLLM:
 
         with self._lock:
             self.calls.append(call_name)
+            self.user_prompts.setdefault(call_name, []).append(user)
         return LLMResponse(text=text, input_tokens=1, output_tokens=1)
 
     def _role_from_system(self, system: str) -> str:
@@ -98,7 +101,9 @@ class FakeLLM:
                 "source_id": "filing:eps",
                 "source_type": "filing",
                 "document_id": "10q-2025q3",
-                "section_id": "eps"
+                "section_id": "eps",
+                "title": "eps filing section",
+                "reported_period": "2025Q3"
               },
               "confidence": 0.70
             }
@@ -136,7 +141,9 @@ class FakeLLM:
                 "source_id": "filing:risk",
                 "source_type": "filing",
                 "document_id": "10q-2025q3",
-                "section_id": "risk"
+                "section_id": "risk",
+                "title": "risk filing section",
+                "reported_period": "2025Q3"
               },
               "confidence": 0.70
             }
@@ -175,7 +182,9 @@ class FakeLLM:
                 "source_id": "filing:eps",
                 "source_type": "filing",
                 "document_id": "10q-2025q3",
-                "section_id": "eps"
+                "section_id": "eps",
+                "title": "eps filing section",
+                "reported_period": "2025Q3"
               },
               "confidence": 0.75
             }
@@ -191,7 +200,9 @@ class FakeLLM:
                 "source_id": "filing:risk",
                 "source_type": "filing",
                 "document_id": "10q-2025q3",
-                "section_id": "risk"
+                "section_id": "risk",
+                "title": "risk filing section",
+                "reported_period": "2025Q3"
               },
               "confidence": 0.70
             }
@@ -212,11 +223,13 @@ class FakeLLM:
           "summary": "{summary}",
           "detail": "{summary}",
           "impact_areas": ["overall"],
-          "source_ref": {{
+            "source_ref": {{
             "source_id": "{source_id}",
             "source_type": "filing",
             "document_id": "10q-2025q3",
-            "section_id": "{section_id}"
+            "section_id": "{section_id}",
+            "title": "{section_id} filing section",
+            "reported_period": "2025Q3"
           }},
           "confidence": 0.70
         }}
@@ -266,6 +279,19 @@ def _source_ref(section_id: str) -> dict:
         "source_type": "filing",
         "document_id": "10q-2025q3",
         "section_id": section_id,
+        "title": f"{section_id} filing section",
+        "reported_period": "2025Q3",
+    }
+
+
+def _manifest_entry(section_id: str) -> dict:
+    return {
+        "source_id": f"filing:{section_id}",
+        "source_type": "filing",
+        "title": f"{section_id} filing section",
+        "document_id": "10q-2025q3",
+        "section_id": section_id,
+        "reported_period": "2025Q3",
     }
 
 
@@ -305,6 +331,16 @@ def _request_payload() -> dict:
                 "text": "Forward-looking statements note demand uncertainty and CapEx execution risk.",
             },
         ],
+        "source_manifest": [
+            _manifest_entry("eps"),
+            _manifest_entry("guidance"),
+            _manifest_entry("risk"),
+        ],
+        "context_budget": {
+            "max_input_tokens": 50_000,
+            "max_output_tokens": 2_000,
+            "max_total_tokens": 60_000,
+        },
     }
 
 
@@ -323,7 +359,21 @@ def test_review_workflow_runs_ordered_api_first_steps(monkeypatch):
     assert response.ticker == "NVDA"
     assert response.fiscal_period == "2025Q3"
     assert response.judge_decision.verdict.value == "good"
-    assert "## Negative Evidence" in response.markdown_report
+    for section in (
+        "## Judge Rationale",
+        "## Bull vs Bear Tension",
+        "## Evidence Matrix",
+        "## Agent Contribution",
+        "## Uncertainty And Missing Data",
+        "## Quality Gates",
+        "## Source Appendix",
+        "## Disclaimer",
+    ):
+        assert section in response.markdown_report
+    assert "| Claim ID | Fact | Interpretation | Implication | Time scope |" in (
+        response.markdown_report
+    )
+    assert "2025Q3" in response.markdown_report
     assert [step.step.value for step in response.steps] == [
         "data_ingestion",
         "financial_agents",
@@ -350,6 +400,9 @@ def test_review_workflow_runs_ordered_api_first_steps(monkeypatch):
     }
     assert fake_llm.calls.count("judge") == 1
     assert len(fake_llm.calls) == 7
+    earnings_quality_prompt = fake_llm.user_prompts["EarningsQualityAnalyst"][0]
+    assert "filing:eps" in earnings_quality_prompt
+    assert "filing:guidance" not in earnings_quality_prompt
 
 
 def test_workflow_rejects_bull_case_evidence_not_in_analysis_brief(monkeypatch):
@@ -471,13 +524,26 @@ def test_reviews_endpoint_delegates_to_workflow():
     api.app.dependency_overrides[api.get_workflow] = override_workflow
     try:
         client = TestClient(api.app)
-        response = client.post("/reviews", json=_request_payload())
+        response = client.post("/reviews", json=normalized_review_payload(dry_run=False))
     finally:
         api.app.dependency_overrides.clear()
 
     assert response.status_code == 200
     body = response.json()
+    assert body["status"] == "completed"
     assert body["ticker"] == "NVDA"
+    assert body["quality_gate_result"]["status"] == "passed"
+    assert body["quality_gate_result"]["source_manifest_entries"] == 5
+    assert {source["source_id"] for source in body["claim_matrix"]["source_manifest"]} == {
+        "api:eps",
+        "api:free_cash_flow",
+        "filing:eps",
+        "filing:guidance",
+        "filing:risk",
+    }
+    assert body["decision_uses"] == body["claim_matrix"]["decision_uses"]
     assert body["judge_decision"]["verdict"] == "good"
     assert body["steps"][-1]["step"] == "markdown_renderer"
     assert "# Earnings Review: NVDA 2025Q3" in body["markdown_report"]
+    assert "## Evidence Matrix" in body["markdown_report"]
+    assert "## Quality Gates" in body["markdown_report"]

@@ -41,7 +41,12 @@ def validate_assets(repo_root: Path = REPO_ROOT) -> list[str]:
     skill_root = repo_root / ".agents" / "skills"
     prompt_root = repo_root / "src" / "prompts"
     errors: list[str] = []
-    validate_local_skills = skill_root.exists()
+    expected_skill_paths = [
+        skill_root / asset["skill"] / "SKILL.md" for asset in AGENT_ASSETS.values()
+    ]
+    validate_local_skills = any(
+        path.is_file() or path.parent.exists() for path in expected_skill_paths
+    )
 
     for role, asset in AGENT_ASSETS.items():
         skill_path = skill_root / asset["skill"] / "SKILL.md"

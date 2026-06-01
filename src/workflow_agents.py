@@ -14,26 +14,74 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Literal, Mapping
+from typing import Any, Literal, Mapping, NoReturn
 
 from pydantic import BaseModel, field_validator
 
 from . import workflow_models as _workflow_models
 from .llm import LLMProvider
 from .prompt_loader import build_system_prompt, resolve_skill_target
-from .structured import parse_model
+from .structured import StructuredOutputError, parse_model
+from .workflow_errors import WorkflowErrorCategory
 
 
 class WorkflowAgentError(RuntimeError):
     """Base exception for workflow agent failures."""
 
-
-class AgentRoleMismatch(WorkflowAgentError):
-    """Raised when validated JSON belongs to a different agent role."""
+    def __init__(
+        self,
+        message: str,
+        *,
+        category: WorkflowErrorCategory | None = None,
+        error_kind: str | None = None,
+        field: str | None = None,
+        retryable: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.category = category
+        self.error_kind = error_kind
+        self.field = field
+        self.retryable = retryable
 
 
 class AgentOutputValidationError(WorkflowAgentError):
     """Raised when the LLM output cannot be parsed into the output contract."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        category: WorkflowErrorCategory = WorkflowErrorCategory.LLM_OUTPUT_SCHEMA,
+        error_kind: str = "schema_mismatch",
+        field: str | None = None,
+        retryable: bool = False,
+    ) -> None:
+        super().__init__(
+            message,
+            category=category,
+            error_kind=error_kind,
+            field=field,
+            retryable=retryable,
+        )
+
+
+class AgentRoleMismatch(AgentOutputValidationError):
+    """Raised when validated JSON belongs to a different agent role."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        field: str | None = None,
+        retryable: bool = True,
+    ) -> None:
+        super().__init__(
+            message,
+            category=WorkflowErrorCategory.AGENT_ROLE,
+            error_kind="role_mismatch",
+            field=field,
+            retryable=retryable,
+        )
 
 
 REQUIRED_FINDING_COVERAGE_KEYS = {
@@ -189,6 +237,45 @@ def _extract_role(value: BaseModel) -> str | None:
     return None
 
 
+def _is_strict_openai_structured_output_schema(schema: Mapping[str, Any]) -> bool:
+    """Return whether a JSON schema is safe for OpenAI strict structured output."""
+
+    return _is_strict_openai_schema_node(schema)
+
+
+def _is_strict_openai_schema_node(node: Any) -> bool:
+    if isinstance(node, bool):
+        return node
+    if not isinstance(node, Mapping):
+        return False
+    if "default" in node or "$defs" in node or "$ref" in node:
+        return False
+
+    for keyword in ("anyOf", "oneOf", "allOf"):
+        variants = node.get(keyword)
+        if variants is not None:
+            if not isinstance(variants, list) or not variants:
+                return False
+            return all(_is_strict_openai_schema_node(variant) for variant in variants)
+
+    if node.get("type") == "array":
+        return _is_strict_openai_schema_node(node.get("items"))
+
+    if node.get("type") == "object" or "properties" in node:
+        properties = node.get("properties")
+        required = node.get("required")
+        if not isinstance(properties, Mapping) or not isinstance(required, list):
+            return False
+        if node.get("additionalProperties") is not False:
+            return False
+        required_names = {name for name in required if isinstance(name, str)}
+        if required_names != set(properties):
+            return False
+        return all(_is_strict_openai_schema_node(child) for child in properties.values())
+
+    return True
+
+
 class WorkflowAgent:
     """Small LLM wrapper for one specialist role."""
 
@@ -208,32 +295,27 @@ class WorkflowAgent:
         merged.update(kwargs)
         resolve_skill_target(self.spec.public_role)
         routed_context = self._select_context(merged)
-        user_prompt = self._build_user_prompt(routed_context)
+        schema = _model_schema(self.spec.output_model)
+        user_prompt = self._build_user_prompt(routed_context, schema)
 
-        last_error: Exception | None = None
+        last_error: AgentOutputValidationError | None = None
         for attempt in range(self.max_retries + 1):
             prompt = user_prompt if attempt == 0 else self._repair_prompt(user_prompt, last_error)
-            response = self.llm.complete(
-                system=self.spec.system_prompt,
-                user=prompt,
-                max_tokens=self.spec.max_tokens,
-                temperature=self.spec.temperature,
-            )
+            response = self._invoke_llm(prompt, schema)
             text = getattr(response, "text", response)
             try:
-                parsed = parse_model(self.spec.output_model, str(text))
-                self._validate_role(parsed)
-                return parsed
-            except Exception as exc:  # noqa: BLE001 - wrap Pydantic/JSON/mismatch uniformly.
+                return self._parse_output(str(text))
+            except AgentOutputValidationError as exc:
                 last_error = exc
+                if attempt >= self.max_retries or not self._should_repair(exc):
+                    break
 
-        if isinstance(last_error, AgentRoleMismatch):
-            raise last_error
-
-        raise AgentOutputValidationError(
-            f"{self.spec.public_role} failed to produce valid JSON for "
-            f"{self.spec.output_model.__name__}: {last_error}"
-        ) from last_error
+        if last_error is None:
+            raise AgentOutputValidationError(
+                f"{self.spec.public_role} failed to produce an LLM response",
+                error_kind="empty_response",
+            )
+        self._raise_repair_exhausted(last_error)
 
     def _select_context(self, context: Mapping[str, Any]) -> dict[str, Any]:
         return {
@@ -242,8 +324,11 @@ class WorkflowAgent:
             if key in context and context[key] is not None
         }
 
-    def _build_user_prompt(self, routed_context: Mapping[str, Any]) -> str:
-        schema = _model_schema(self.spec.output_model)
+    def _build_user_prompt(
+        self,
+        routed_context: Mapping[str, Any],
+        schema: Mapping[str, Any],
+    ) -> str:
         return (
             f"{self.spec.task_prompt}\n\n"
             "制約:\n"
@@ -265,12 +350,81 @@ class WorkflowAgent:
             f"{_to_json(schema)}"
         )
 
+    def _invoke_llm(self, prompt: str, schema: Mapping[str, Any]) -> Any:
+        complete_structured = getattr(self.llm, "complete_structured", None)
+        if callable(complete_structured) and _is_strict_openai_structured_output_schema(schema):
+            try:
+                return complete_structured(
+                    system=self.spec.system_prompt,
+                    user=prompt,
+                    output_schema=schema,
+                    schema_name=self.spec.output_model.__name__,
+                    max_tokens=self.spec.max_tokens,
+                    temperature=self.spec.temperature,
+                )
+            except NotImplementedError:
+                pass
+
+        return self.llm.complete(
+            system=self.spec.system_prompt,
+            user=prompt,
+            max_tokens=self.spec.max_tokens,
+            temperature=self.spec.temperature,
+        )
+
+    def _parse_output(self, text: str) -> BaseModel:
+        try:
+            parsed = parse_model(self.spec.output_model, text)
+        except StructuredOutputError as exc:
+            raise AgentOutputValidationError(
+                f"{self.spec.output_model.__name__} output failed {exc.error_kind}: {exc}",
+                category=exc.category,
+                error_kind=exc.error_kind,
+                field=exc.field,
+                retryable=True,
+            ) from exc
+        self._validate_role(parsed)
+        return parsed
+
+    def _should_repair(self, error: AgentOutputValidationError) -> bool:
+        return error.category in {
+            WorkflowErrorCategory.LLM_OUTPUT_SCHEMA,
+            WorkflowErrorCategory.AGENT_ROLE,
+        }
+
+    def _raise_repair_exhausted(self, error: AgentOutputValidationError) -> NoReturn:
+        message = (
+            f"{self.spec.public_role} failed to produce valid JSON for "
+            f"{self.spec.output_model.__name__}: {error}"
+        )
+        if error.category is WorkflowErrorCategory.AGENT_ROLE:
+            raise AgentRoleMismatch(message, field=error.field, retryable=False) from error
+        raise AgentOutputValidationError(
+            message,
+            category=error.category or WorkflowErrorCategory.LLM_OUTPUT_SCHEMA,
+            error_kind=error.error_kind or "schema_mismatch",
+            field=error.field,
+            retryable=False,
+        ) from error
+
     def _repair_prompt(self, original_prompt: str, error: Exception | None) -> str:
+        details = [f"{type(error).__name__}: {error}"]
+        category = getattr(error, "category", None)
+        if category is not None:
+            category_value = getattr(category, "value", category)
+            details.append(f"category: {category_value}")
+        error_kind = getattr(error, "error_kind", None)
+        if error_kind:
+            details.append(f"kind: {error_kind}")
+        field = getattr(error, "field", None)
+        if field:
+            details.append(f"field: {field}")
         return (
             f"{original_prompt}\n\n"
             "# previous_output_error\n"
-            f"{type(error).__name__}: {error}\n\n"
+            f"{chr(10).join(details)}\n\n"
             "上のエラーを修正し、同じschemaに合うJSONのみを返してください。\n"
+            f"role field がある場合は {self.spec.output_agent_name!r} を入れてください。\n"
             "`source_ref` は routed_context.source_index に存在するentryを正確にコピーしてください。"
             "source_id, source_type, url, document_id, section_id, metric_name, page, title を"
             "省略・変更しないでください。source_indexに存在しないsource_idを作らないでください。\n"
@@ -286,7 +440,8 @@ class WorkflowAgent:
         if actual not in self.spec.accepted_role_values:
             expected = ", ".join(repr(v) for v in self.spec.accepted_role_values)
             raise AgentRoleMismatch(
-                f"{self.spec.public_role} expected role {expected}, got {actual!r}"
+                f"{self.spec.public_role} expected role {expected}, got {actual!r}",
+                field="agent_name",
             )
 
 

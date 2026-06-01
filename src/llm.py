@@ -10,9 +10,12 @@ from __future__ import annotations
 import json
 import os
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass
 from threading import Lock
 from typing import Any
+
+from .workflow_errors import WorkflowErrorCategory
 
 
 @dataclass
@@ -20,6 +23,23 @@ class LLMResponse:
     text: str
     input_tokens: int
     output_tokens: int
+
+
+class LLMProviderError(RuntimeError):
+    """Provider-side failure with a stable workflow category."""
+
+    def __init__(
+        self,
+        category: WorkflowErrorCategory,
+        message: str,
+        *,
+        provider: str,
+        retryable: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.category = category
+        self.provider = provider
+        self.retryable = retryable
 
 
 class LLMProvider(ABC):
@@ -32,22 +52,44 @@ class LLMProvider(ABC):
         temperature: float = 0.7,
     ) -> LLMResponse: ...
 
+    def complete_structured(
+        self,
+        system: str,
+        user: str,
+        *,
+        output_schema: Mapping[str, Any],
+        schema_name: str,
+        max_tokens: int = 2048,
+        temperature: float = 0.7,
+    ) -> LLMResponse:
+        return self.complete(
+            system=system,
+            user=user,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+
 
 class AnthropicProvider(LLMProvider):
     def __init__(self, model: str | None = None):
         from anthropic import Anthropic
 
         self.client = Anthropic()  # picks up ANTHROPIC_API_KEY from env
-        self.model = model or os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5")
+        self.model: str = (
+            model if model is not None else os.getenv("ANTHROPIC_MODEL") or "claude-sonnet-4-5"
+        )
 
     def complete(self, system, user, max_tokens=2048, temperature=0.7):
-        resp = self.client.messages.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        )
+        try:
+            resp = self.client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+            )
+        except Exception as exc:
+            raise _map_provider_exception("anthropic", exc) from exc
         return LLMResponse(
             text=resp.content[0].text,
             input_tokens=resp.usage.input_tokens,
@@ -60,9 +102,42 @@ class OpenAIProvider(LLMProvider):
         from openai import OpenAI
 
         self.client = OpenAI()  # picks up OPENAI_API_KEY from env
-        self.model = model or os.getenv("OPENAI_MODEL", "gpt-5.4-mini")
+        self.model: str = (
+            model if model is not None else os.getenv("OPENAI_MODEL") or "gpt-5.4-mini"
+        )
 
     def complete(self, system, user, max_tokens=2048, temperature=0.7):
+        params = self._completion_params(system, user, max_tokens, temperature)
+        return self._create_completion(params)
+
+    def complete_structured(
+        self,
+        system: str,
+        user: str,
+        *,
+        output_schema: Mapping[str, Any],
+        schema_name: str,
+        max_tokens: int = 2048,
+        temperature: float = 0.7,
+    ) -> LLMResponse:
+        params = self._completion_params(system, user, max_tokens, temperature)
+        params["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": schema_name,
+                "schema": dict(output_schema),
+                "strict": True,
+            },
+        }
+        return self._create_completion(params)
+
+    def _completion_params(
+        self,
+        system: str,
+        user: str,
+        max_tokens: int,
+        temperature: float,
+    ) -> dict[str, Any]:
         params: dict[str, Any] = {
             "model": self.model,
             "messages": [
@@ -76,7 +151,13 @@ class OpenAIProvider(LLMProvider):
             params["max_tokens"] = max_tokens
             params["temperature"] = temperature
 
-        resp = self.client.chat.completions.create(**params)
+        return params
+
+    def _create_completion(self, params: Mapping[str, Any]) -> LLMResponse:
+        try:
+            resp = self.client.chat.completions.create(**params)
+        except Exception as exc:
+            raise _map_provider_exception("openai", exc) from exc
         return LLMResponse(
             text=resp.choices[0].message.content or "",
             input_tokens=resp.usage.prompt_tokens,
@@ -87,6 +168,74 @@ class OpenAIProvider(LLMProvider):
 def _openai_uses_max_completion_tokens(model: str) -> bool:
     normalized = model.lower()
     return normalized.startswith(("gpt-5", "o1", "o3", "o4"))
+
+
+CONFIG_STATUS_CODES = {400, 401, 403, 404, 422}
+TRANSIENT_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504}
+CONFIG_ERROR_MARKERS = (
+    "authentication",
+    "api key",
+    "api_key",
+    "unauthorized",
+    "permission",
+    "forbidden",
+    "badrequest",
+    "bad request",
+    "invalid_request",
+    "model_not_found",
+    "not found",
+)
+TRANSIENT_ERROR_MARKERS = (
+    "ratelimit",
+    "rate limit",
+    "timeout",
+    "connection",
+    "internalserver",
+    "internal server",
+    "servererror",
+    "service unavailable",
+    "temporarily",
+    "overloaded",
+)
+
+
+def _map_provider_exception(provider: str, exc: Exception) -> LLMProviderError:
+    if isinstance(exc, LLMProviderError):
+        return exc
+
+    status_code = _status_code(exc)
+    searchable = f"{type(exc).__name__} {exc}".lower()
+    if status_code in CONFIG_STATUS_CODES or any(
+        marker in searchable for marker in CONFIG_ERROR_MARKERS
+    ):
+        return LLMProviderError(
+            WorkflowErrorCategory.PROVIDER_CONFIG,
+            f"{provider} provider configuration failed: {exc}",
+            provider=provider,
+            retryable=False,
+        )
+    if status_code in TRANSIENT_STATUS_CODES or any(
+        marker in searchable for marker in TRANSIENT_ERROR_MARKERS
+    ):
+        return LLMProviderError(
+            WorkflowErrorCategory.PROVIDER_TRANSIENT,
+            f"{provider} provider transient failure: {exc}",
+            provider=provider,
+            retryable=True,
+        )
+    return LLMProviderError(
+        WorkflowErrorCategory.PROVIDER,
+        f"{provider} provider request failed: {exc}",
+        provider=provider,
+        retryable=False,
+    )
+
+
+def _status_code(exc: Exception) -> int | None:
+    status_code = getattr(exc, "status_code", None) or getattr(exc, "status", None)
+    if isinstance(status_code, int):
+        return status_code
+    return None
 
 
 class FakeProvider(LLMProvider):
@@ -175,14 +324,25 @@ class FakeProvider(LLMProvider):
             and isinstance(positive_pool[0], dict)
             and "source_ref" in positive_pool[0]
         ):
-            positive = positive_pool[0]["source_ref"]
-            negative = (
-                negative_pool[0]["source_ref"]
-                if negative_pool
-                and isinstance(negative_pool[0], dict)
-                and "source_ref" in negative_pool[0]
-                else positive
+            positive = (
+                self._source_ref_for_evidence(
+                    positive_pool,
+                    "EarningsQualityAnalyst:positive",
+                )
+                or positive_pool[0]["source_ref"]
             )
+            negative = self._source_ref_for_evidence(
+                negative_pool,
+                "CashFlowRiskAnalyst:negative",
+            )
+            if negative is None:
+                negative = (
+                    negative_pool[0]["source_ref"]
+                    if negative_pool
+                    and isinstance(negative_pool[0], dict)
+                    and "source_ref" in negative_pool[0]
+                    else positive
+                )
             return positive, negative
 
         source_refs = [
@@ -203,6 +363,23 @@ class FakeProvider(LLMProvider):
             source_refs[-1],
         )
         return positive, negative
+
+    def _source_ref_for_evidence(
+        self,
+        evidence_pool: Any,
+        evidence_id: str,
+    ) -> dict[str, Any] | None:
+        if not isinstance(evidence_pool, list):
+            return None
+        for item in evidence_pool:
+            if not isinstance(item, dict):
+                continue
+            if item.get("evidence_id") != evidence_id:
+                continue
+            source_ref = item.get("source_ref")
+            if isinstance(source_ref, dict):
+                return source_ref
+        return None
 
     def _collect_source_refs(self, value: Any) -> list[dict[str, Any]]:
         if isinstance(value, dict):

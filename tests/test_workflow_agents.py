@@ -1,10 +1,12 @@
 import pytest
+from pydantic import BaseModel, ConfigDict
 
-from src.llm import LLMResponse
+from src.llm import LLMProviderError, LLMResponse
 from src.workflow_agents import (
     ALL_WORKFLOW_AGENT_CLASSES,
     SPECIALIST_AGENT_CLASSES,
     AgentOutputValidationError,
+    AgentSpec,
     BearAgent,
     BullAgent,
     CashFlowRiskAnalyst,
@@ -12,8 +14,10 @@ from src.workflow_agents import (
     GuidanceAnalyst,
     JudgeAgent,
     JudgeDecision,
+    WorkflowAgent,
     build_default_agents,
 )
+from src.workflow_errors import WorkflowErrorCategory
 
 
 class FakeLLM:
@@ -32,6 +36,57 @@ class FakeLLM:
         )
         text = self.responses.pop(0)
         return LLMResponse(text=text, input_tokens=1, output_tokens=1)
+
+
+class StructuredFakeLLM(FakeLLM):
+    def __init__(self, responses):
+        super().__init__(responses)
+        self.structured_calls = []
+
+    def complete_structured(
+        self,
+        system,
+        user,
+        *,
+        output_schema,
+        schema_name,
+        max_tokens=2048,
+        temperature=0.7,
+    ):
+        self.structured_calls.append(
+            {
+                "output_schema": output_schema,
+                "schema_name": schema_name,
+            }
+        )
+        return super().complete(system, user, max_tokens=max_tokens, temperature=temperature)
+
+
+class RaisingLLM:
+    def __init__(self, error):
+        self.error = error
+        self.calls = 0
+
+    def complete(self, system, user, max_tokens=2048, temperature=0.7):
+        self.calls += 1
+        raise self.error
+
+
+class StrictAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    answer: str
+
+
+class StrictStructuredAgent(WorkflowAgent):
+    spec = AgentSpec(
+        public_role="EarningsQualityAnalyst",
+        output_agent_name="strict_structured_agent",
+        output_model=StrictAnswer,
+        context_keys=("prompt",),
+        system_prompt="Return strict JSON.",
+        task_prompt="StrictAnswer JSONを作成してください。",
+    )
 
 
 def evidence_json(evidence_id, polarity, source_id="filing:eps"):
@@ -292,8 +347,28 @@ def test_agent_rejects_role_mismatch_without_retry_when_disabled():
     llm = FakeLLM([earnings_quality_json(agent_name="GuidanceAnalyst")])
     agent = EarningsQualityAnalyst(llm, max_retries=0)
 
-    with pytest.raises(AgentOutputValidationError):
+    with pytest.raises(AgentOutputValidationError) as excinfo:
         agent.run({"run_spec": {"ticker": "NVDA"}})
+
+    assert excinfo.value.category is WorkflowErrorCategory.AGENT_ROLE
+    assert excinfo.value.error_kind == "role_mismatch"
+
+
+def test_agent_repairs_role_mismatch_on_retry():
+    llm = FakeLLM(
+        [
+            earnings_quality_json(agent_name="GuidanceAnalyst"),
+            earnings_quality_json(),
+        ]
+    )
+    agent = EarningsQualityAnalyst(llm, max_retries=1)
+
+    result = agent.run({"run_spec": {"ticker": "NVDA"}})
+
+    assert result.agent_name == "EarningsQualityAnalyst"
+    assert len(llm.calls) == 2
+    assert "category: agent_role" in llm.calls[1]["user"]
+    assert "role_mismatch" in llm.calls[1]["user"]
 
 
 def test_agent_retries_once_for_invalid_json():
@@ -347,6 +422,36 @@ def test_agent_repair_prompt_explains_financial_source_ref_metric_name():
     assert "根拠を補正・捏造" in repair_prompt
 
 
+def test_agent_evidence_mismatch_exhaustion_is_schema_category():
+    invalid_source_ref = """
+    {
+      "source_id": "financial:guidance:revenue_delta",
+      "source_type": "financial_api"
+    }
+    """
+    llm = FakeLLM([guidance_json(invalid_source_ref), guidance_json(invalid_source_ref)])
+    agent = GuidanceAnalyst(llm, max_retries=1)
+
+    with pytest.raises(AgentOutputValidationError) as excinfo:
+        agent.run(
+            {
+                "run_spec": {"ticker": "NVDA", "fiscal_period": "2027Q1"},
+                "guidance_consensus_deltas": {"revenue_guidance_consensus_delta": 1.2},
+                "source_index": [
+                    {
+                        "source_id": "financial:guidance:revenue_delta",
+                        "source_type": "financial_api",
+                        "metric_name": "revenue_guidance_consensus_delta",
+                    }
+                ],
+            }
+        )
+
+    assert excinfo.value.category is WorkflowErrorCategory.LLM_OUTPUT_SCHEMA
+    assert excinfo.value.error_kind == "evidence_mismatch"
+    assert len(llm.calls) == 2
+
+
 def test_agent_prompt_requires_exact_source_index_references():
     llm = FakeLLM([earnings_quality_json()])
     agent = EarningsQualityAnalyst(llm)
@@ -379,10 +484,58 @@ def test_agent_stops_after_single_retry():
     llm = FakeLLM(["not json", "still not json"])
     agent = EarningsQualityAnalyst(llm, max_retries=1)
 
-    with pytest.raises(AgentOutputValidationError):
+    with pytest.raises(AgentOutputValidationError) as excinfo:
         agent.run({"run_spec": {"ticker": "NVDA"}})
 
+    assert excinfo.value.category is WorkflowErrorCategory.LLM_OUTPUT_SCHEMA
+    assert excinfo.value.error_kind == "invalid_json"
     assert len(llm.calls) == 2
+
+
+def test_active_agent_uses_plain_complete_when_schema_is_not_strict_compatible():
+    llm = StructuredFakeLLM([earnings_quality_json()])
+    agent = EarningsQualityAnalyst(llm)
+
+    result = agent.run({"run_spec": {"ticker": "NVDA"}})
+
+    assert result.agent_name == "EarningsQualityAnalyst"
+    assert llm.structured_calls == []
+    assert len(llm.calls) == 1
+
+
+def test_agent_uses_provider_native_structured_hook_when_schema_gate_allows_it():
+    llm = StructuredFakeLLM(['{"answer": "ok"}'])
+    agent = StrictStructuredAgent(llm)
+
+    result = agent.run({"prompt": "answer"})
+
+    assert result.answer == "ok"
+    assert llm.structured_calls[0]["schema_name"] == "StrictAnswer"
+    assert "properties" in llm.structured_calls[0]["output_schema"]
+
+
+@pytest.mark.parametrize(
+    "category",
+    [
+        WorkflowErrorCategory.PROVIDER_CONFIG,
+        WorkflowErrorCategory.PROVIDER_TRANSIENT,
+    ],
+)
+def test_provider_error_is_not_hidden_as_schema_failure(category):
+    error = LLMProviderError(
+        category,
+        "openai provider failed",
+        provider="openai",
+        retryable=category is WorkflowErrorCategory.PROVIDER_TRANSIENT,
+    )
+    llm = RaisingLLM(error)
+    agent = EarningsQualityAnalyst(llm)
+
+    with pytest.raises(LLMProviderError) as excinfo:
+        agent.run({"run_spec": {"ticker": "NVDA"}})
+
+    assert excinfo.value.category is category
+    assert llm.calls == 1
 
 
 def test_bull_and_bear_schema_requires_finding_coverage():

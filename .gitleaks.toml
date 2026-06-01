@@ -1,0 +1,11 @@
+title = "Foundation Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "sanitized Figma example file keys in skill documentation"
+regexes = [
+  '''kL9xQn2VwM8pYrTb4ZcHjF''',
+  '''pR8mNv5KqXzGwY2JtCfL4D''',
+]

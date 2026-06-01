@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from src import api
 from src.llm import FakeProvider
 from src.workflow import ReviewWorkflow
-from tests.test_workflow_api import _request_payload
+from tests.test_api_contract import normalized_review_payload
 
 
 def test_reviews_api_fake_smoke_returns_markdown_report(monkeypatch):
@@ -19,42 +19,53 @@ def test_reviews_api_fake_smoke_returns_markdown_report(monkeypatch):
 
     api.app.dependency_overrides[api.get_workflow] = override_workflow
     try:
-        response = TestClient(api.app).post("/reviews", json=_request_payload())
+        response = TestClient(api.app).post(
+            "/reviews",
+            json=normalized_review_payload(dry_run=False),
+        )
     finally:
         api.app.dependency_overrides.clear()
 
     assert response.status_code == 200
     body = response.json()
+    assert body["status"] == "completed"
+    assert body["request_id"] == "req-api-contract-1"
+    assert body["quality_gate_result"]["status"] == "passed"
+    assert body["quality_gate_result"]["source_manifest_entries"] == 5
+    assert {source["source_id"] for source in body["claim_matrix"]["source_manifest"]} == {
+        "api:eps",
+        "api:free_cash_flow",
+        "filing:eps",
+        "filing:guidance",
+        "filing:risk",
+    }
     assert body["markdown_report"]
+    assert body["markdown_report"].count("api:eps") == 1
+    assert body["markdown_report"].count("api:free_cash_flow") == 1
     for section in (
-        "## Verdict",
-        "## Positive Evidence",
-        "## Negative Evidence",
-        "## EPS Outlook",
-        "## FCF Outlook",
+        "## Judge Rationale",
+        "## Evidence Matrix",
+        "## Quality Gates",
+        "## Disclaimer",
     ):
         assert section in body["markdown_report"]
 
 
-def test_reviews_api_returns_4xx_for_invalid_document_file(monkeypatch):
+def test_reviews_api_rejects_raw_document_files_with_error_envelope(monkeypatch):
     monkeypatch.setattr("src.workflow._fetch_consensus", lambda *args, **kwargs: None)
 
     def override_workflow() -> ReviewWorkflow:
         return ReviewWorkflow(FakeProvider())
 
-    payload = {
-        "ticker": "NVDA",
-        "fiscal_period": "2025Q3",
-        "financial_metrics": {"ticker": "NVDA", "fiscal_period": "2025Q3"},
-        "document_files": [
-            {
-                "path": "tests/fixtures/missing_presentation.txt",
-                "source_type": "earnings_presentation",
-                "document_id": "sample-presentation",
-                "title": "Sample earnings presentation",
-            }
-        ],
-    }
+    payload = normalized_review_payload(dry_run=False)
+    payload["document_files"] = [
+        {
+            "path": "tests/fixtures/missing_presentation.txt",
+            "source_type": "earnings_presentation",
+            "document_id": "sample-presentation",
+            "title": "Sample earnings presentation",
+        }
+    ]
 
     api.app.dependency_overrides[api.get_workflow] = override_workflow
     try:
@@ -66,4 +77,7 @@ def test_reviews_api_returns_4xx_for_invalid_document_file(monkeypatch):
         api.app.dependency_overrides.clear()
 
     assert response.status_code == 422
-    assert "document file does not exist" in response.json()["detail"]
+    body = response.json()
+    assert body["status"] == "failed"
+    assert body["errors"][0]["category"] == "input_contract"
+    assert "document_files" in body["errors"][0]["message"]

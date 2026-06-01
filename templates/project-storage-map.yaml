@@ -1,0 +1,32 @@
+schema_version: "0.1"
+record_type: project_storage_map
+status: draft
+
+project:
+  project_id: "<project-id>"
+  # This root is external to the foundation repo.
+  # Do not create a default projects/ root inside this repository.
+  canonical_root: "<external-project-root>"
+
+canonical_records:
+  brief: "<external-project-root>/brief.md"
+  state: "<external-project-root>/state.yaml"
+  storage_map: "<external-project-root>/storage-map.yaml"
+  work_notes: "<external-project-root>/notes/"
+  decisions: "<external-project-root>/notes/09-decisions.md"
+  artifacts: "<external-project-root>/artifacts/"
+  evidence: "<external-project-root>/artifacts/evidence/"
+  verification: "<external-project-root>/artifacts/verification/"
+  implementation_refs: "<external-project-root>/implementation/"
+  logs: "<external-project-root>/logs/"
+
+overlays:
+  - name: example_overlay
+    path: "<external-overlay-root>/Apps/<project-id>"
+    role: read_sync_overlay
+    canonical_ref: "<external-project-root>/"
+
+rules:
+  source_of_truth: project_local
+  overlay_conflict_resolution: "project-local record wins unless a migration record says otherwise"
+  generated_exports_are_canonical: false

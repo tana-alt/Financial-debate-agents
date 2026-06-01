@@ -1,6 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
+from src.workflow_errors import WorkflowErrorCategory
 from src.workflow_models import (
     AgentResult,
     AgentRole,
@@ -9,19 +10,32 @@ from src.workflow_models import (
     BearCase,
     BullCase,
     CashFlowRiskFinding,
+    ClaimRecord,
+    ClaimType,
     DebateResult,
+    DecisionUse,
     EarningsQualityFinding,
     EvidenceItem,
     EvidencePolarity,
+    FactCheckStatus,
     FinalVerdict,
     FinancialMetrics,
     FindingCoverage,
     GuidanceFinding,
     ImpactArea,
     JudgeDecision,
+    JudgeTreatment,
+    LineRange,
     ManagementIntentFinding,
+    MissingDataItem,
+    NormalizedReviewRequest,
+    ReportMatrix,
+    ReviewDryRunResponse,
+    ReviewErrorResponse,
     ReviewRequest,
     ReviewResponse,
+    ReviewStatus,
+    SourceManifestEntry,
     SourceRef,
     SourceType,
     StepState,
@@ -405,3 +419,331 @@ def test_full_review_response_contains_structured_result_and_markdown():
     assert response.ticker == "NVDA"
     assert response.markdown_report.startswith("# Earnings Review")
     assert response.is_investment_advice is False
+
+
+def source_manifest() -> list[SourceManifestEntry]:
+    return [
+        SourceManifestEntry(
+            source_id="api:eps:2025Q3",
+            source_type=SourceType.FINANCIAL_API,
+            title="Financial API",
+            metric_name="eps",
+            reported_period="2025Q3",
+        ),
+        SourceManifestEntry(
+            source_id="filing:10q:item2",
+            source_type=SourceType.FILING,
+            title="Q3 10-Q Item 2",
+            document_id="10q-2025q3",
+            section_id="item2",
+            page=14,
+            reported_period="2025Q3",
+        ),
+    ]
+
+
+def normalized_request_payload() -> dict[str, object]:
+    return {
+        "schema_version": "review_input.v1",
+        "request_id": "req-normalized-1",
+        "ticker": " nvda ",
+        "fiscal_period": "2025Q3",
+        "financial_metrics": FinancialMetrics(
+            ticker="NVDA",
+            fiscal_period="2025Q3",
+            source_refs=[financial_source("eps")],
+        ),
+        "document_sections": [
+            {
+                "section_id": "item2",
+                "source_ref": filing_source(),
+                "heading": "Management discussion",
+                "text": "Management described demand strength and investment needs.",
+            }
+        ],
+        "source_manifest": source_manifest(),
+        "context_budget": {
+            "max_input_tokens": 6000,
+            "max_output_tokens": 2000,
+            "max_total_tokens": 10000,
+        },
+        "include_markdown": True,
+        "purpose": "earnings_review_not_investment_advice",
+        "is_investment_advice": False,
+        "dry_run": True,
+    }
+
+
+def test_normalized_review_request_requires_registered_normalized_input():
+    request = NormalizedReviewRequest.model_validate(normalized_request_payload())
+
+    assert request.ticker == "NVDA"
+    assert request.dry_run is True
+    assert request.context_budget.max_total_tokens == 10000
+    assert request.registered_source_ids == {"api:eps:2025Q3", "filing:10q:item2"}
+
+
+def test_normalized_review_request_rejects_raw_acquisition_fields():
+    payload = normalized_request_payload()
+    payload["filing_url"] = "https://example.com/10-q"
+
+    with pytest.raises(ValidationError, match="raw acquisition fields"):
+        NormalizedReviewRequest.model_validate(payload)
+
+
+def test_normalized_review_request_rejects_unregistered_section_source():
+    payload = normalized_request_payload()
+    payload["document_sections"] = [
+        {
+            "section_id": "item2",
+            "source_ref": SourceRef(
+                source_id="filing:missing",
+                source_type=SourceType.FILING,
+                document_id="10q-2025q3",
+                section_id="item2",
+            ),
+            "heading": "Management discussion",
+            "text": "This section is not registered in the source manifest.",
+        }
+    ]
+
+    with pytest.raises(ValidationError, match="unregistered source_id"):
+        NormalizedReviewRequest.model_validate(payload)
+
+
+def test_normalized_review_request_rejects_financial_ref_reusing_filing_source_id():
+    payload = normalized_request_payload()
+    payload["financial_metrics"] = FinancialMetrics(
+        ticker="NVDA",
+        fiscal_period="2025Q3",
+        source_refs=[
+            SourceRef(
+                source_id="filing:10q:item2",
+                source_type=SourceType.FINANCIAL_API,
+                metric_name="eps",
+            )
+        ],
+    )
+
+    with pytest.raises(ValidationError, match="source_manifest mismatch.*source_type"):
+        NormalizedReviewRequest.model_validate(payload)
+
+
+def test_normalized_review_request_rejects_document_locator_mismatch():
+    payload = normalized_request_payload()
+    payload["document_sections"] = [
+        {
+            "section_id": "item2",
+            "source_ref": SourceRef(
+                source_id="filing:10q:item2",
+                source_type=SourceType.FILING,
+                document_id="different-10q",
+                section_id="item2",
+            ),
+            "heading": "Management discussion",
+            "text": "This section conflicts with the source manifest document ID.",
+        }
+    ]
+
+    with pytest.raises(ValidationError, match="source_manifest mismatch.*document_id"):
+        NormalizedReviewRequest.model_validate(payload)
+
+
+def test_report_matrix_separates_fact_interpretation_and_judge_usage():
+    fact = evidence()
+    fact.fact_check_status = FactCheckStatus.SUPPORTED
+    fact.quote = "Adjusted EPS exceeded consensus."
+    fact.reported_period = "2025Q3"
+
+    matrix = ReportMatrix(
+        source_manifest=source_manifest(),
+        evidence_items=[fact],
+        claim_records=[
+            ClaimRecord(
+                claim_id="claim:eps-quality",
+                claim_type=ClaimType.INTERPRETATION,
+                agent_role=AgentRole.EARNINGS_QUALITY,
+                time_scope="2025Q3",
+                claim="EPS quality improved because the beat was supported by margin expansion.",
+                evidence_ids=[fact.evidence_id],
+                counter_evidence_ids=[],
+                interpretation="The fact supports earnings quality, but does not prove durability.",
+                implication="The report should distinguish current-quarter support from forward outlook.",
+                confidence=0.74,
+                limitations=["Durability depends on next-quarter margin evidence."],
+            )
+        ],
+        decision_uses=[
+            DecisionUse(
+                decision_use_id="decision:eps-quality",
+                treatment=JudgeTreatment.SUPPORTING,
+                claim_id="claim:eps-quality",
+                decisive_evidence_ids=[fact.evidence_id],
+                rationale="The claim is supported by a checked EPS fact.",
+                verdict_impact=EvidencePolarity.POSITIVE,
+                confidence_impact=0.12,
+            )
+        ],
+        missing_data_items=[
+            MissingDataItem(
+                missing_data_id="missing:fcf-bridge",
+                topic="FCF bridge",
+                reason="The source set does not explain the cash conversion bridge.",
+                materiality="medium",
+            )
+        ],
+    )
+
+    assert matrix.evidence_items[0].fact_check_status is FactCheckStatus.SUPPORTED
+    assert matrix.claim_records[0].claim_type is ClaimType.INTERPRETATION
+    assert matrix.decision_uses[0].treatment is JudgeTreatment.SUPPORTING
+
+
+def test_report_matrix_rejects_unregistered_evidence_source():
+    fact = evidence()
+    fact.source_ref = SourceRef(
+        source_id="api:missing",
+        source_type=SourceType.FINANCIAL_API,
+        metric_name="eps",
+    )
+
+    with pytest.raises(ValidationError, match="unregistered source_id"):
+        ReportMatrix(source_manifest=source_manifest(), evidence_items=[fact])
+
+
+def test_report_matrix_rejects_metric_source_mismatch():
+    fact = evidence()
+    fact.source_ref = SourceRef(
+        source_id="api:eps:2025Q3",
+        source_type=SourceType.FINANCIAL_API,
+        metric_name="revenue",
+    )
+
+    with pytest.raises(ValidationError, match="source_manifest mismatch.*metric_name"):
+        ReportMatrix(source_manifest=source_manifest(), evidence_items=[fact])
+
+
+def test_report_matrix_rejects_document_source_mismatch():
+    fact = evidence()
+    fact.source_ref = SourceRef(
+        source_id="filing:10q:item2",
+        source_type=SourceType.FILING,
+        document_id="10q-2025q3",
+        section_id="different-item",
+    )
+
+    with pytest.raises(ValidationError, match="source_manifest mismatch.*section_id"):
+        ReportMatrix(source_manifest=source_manifest(), evidence_items=[fact])
+
+
+def test_report_matrix_rejects_document_line_range_mismatch():
+    fact = evidence()
+    fact.source_ref = SourceRef(
+        source_id="filing:10q:item2",
+        source_type=SourceType.FILING,
+        document_id="10q-2025q3",
+        section_id="item2",
+        line_range=LineRange(start=20, end=22),
+    )
+    manifest = source_manifest()
+    manifest[1] = manifest[1].model_copy(update={"line_range": LineRange(start=10, end=12)})
+
+    with pytest.raises(ValidationError, match="source_manifest mismatch.*line_range"):
+        ReportMatrix(source_manifest=manifest, evidence_items=[fact])
+
+
+def test_response_envelopes_keep_dry_run_separate_from_final_report():
+    dry_run = ReviewDryRunResponse(
+        request_id="req-normalized-1",
+        ticker="NVDA",
+        fiscal_period="2025Q3",
+        dry_run_status="passed",
+        checks=[
+            {
+                "name": "normalized_input_contract",
+                "status": "passed",
+                "message": "Input is normalized and source IDs are registered.",
+            }
+        ],
+    )
+
+    dumped = dry_run.model_dump()
+
+    assert dry_run.status is ReviewStatus.DRY_RUN
+    assert "judge_decision" not in dumped
+    assert "markdown_report" not in dumped
+
+    with pytest.raises(ValidationError):
+        ReviewDryRunResponse(
+            request_id="req-normalized-1",
+            ticker="NVDA",
+            fiscal_period="2025Q3",
+            dry_run_status="passed",
+            checks=[
+                {
+                    "name": "normalized_input_contract",
+                    "status": "passed",
+                    "message": "Input is normalized.",
+                }
+            ],
+            markdown_report="# Not allowed",
+        )
+
+
+def test_dry_run_passed_response_cannot_include_errors():
+    with pytest.raises(ValidationError, match="passed dry-run response cannot include errors"):
+        ReviewDryRunResponse(
+            request_id="req-normalized-1",
+            ticker="NVDA",
+            fiscal_period="2025Q3",
+            dry_run_status="passed",
+            checks=[
+                {
+                    "name": "normalized_input_contract",
+                    "status": "passed",
+                    "message": "Input is normalized.",
+                }
+            ],
+            errors=[
+                {
+                    "category": WorkflowErrorCategory.INPUT_CONTRACT,
+                    "message": "This error should make the dry-run fail.",
+                }
+            ],
+        )
+
+
+def test_review_error_response_uses_controlled_error_categories():
+    response = ReviewErrorResponse(
+        request_id="req-normalized-1",
+        ticker="NVDA",
+        fiscal_period="2025Q3",
+        errors=[
+            {
+                "category": WorkflowErrorCategory.LLM_OUTPUT_SCHEMA,
+                "message": "Agent output did not match the JSON schema.",
+                "retryable": True,
+            }
+        ],
+    )
+
+    assert response.status is ReviewStatus.FAILED
+    assert response.errors[0].category is WorkflowErrorCategory.LLM_OUTPUT_SCHEMA
+
+
+def test_workflow_error_category_taxonomy_matches_plan_contract():
+    assert [category.value for category in WorkflowErrorCategory] == [
+        "input_contract",
+        "source_manifest",
+        "context_budget",
+        "provider",
+        "provider_transient",
+        "provider_config",
+        "llm_output_schema",
+        "agent_role",
+        "evidence_source",
+        "evidence_aggregation",
+        "quality_gate",
+        "render_response",
+        "internal_invariant",
+    ]

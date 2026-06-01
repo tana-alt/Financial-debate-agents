@@ -9,15 +9,17 @@ evidence aggregation -> debate agents -> judge -> Markdown renderer.
 
 from __future__ import annotations
 
+import re
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
+from .context_router import ContextRouter
 from .llm import LLMProvider
-from .report_quality_evidence_matrix import evidence_matrix_lines
 from .report_quality_guidance import validate_guidance_required
-from .report_quality_missing_data import apply_confidence_caps, missing_data_lines
+from .report_quality_missing_data import apply_confidence_caps
 from .report_quality_numeric_grounding import validate_numeric_grounding
-from .report_quality_source_inventory import source_inventory_lines
+from .report_renderer import ReportRenderer
 from .workflow_agents import (
     CashFlowRiskAnalyst,
     EarningsQualityAnalyst,
@@ -25,15 +27,24 @@ from .workflow_agents import (
     ManagementIntentAnalyst,
 )
 from .workflow_models import (
+    AgentRole,
     AnalysisBrief,
+    ClaimRecord,
+    ClaimType,
     DebateResult,
+    DecisionUse,
     DocumentSection,
     EvidenceItem,
+    EvidencePolarity,
     FinancialMetrics,
     JudgeDecision,
+    JudgeTreatment,
+    MissingDataItem,
+    NormalizedReviewRequest,
+    ReportMatrix,
     ReviewRequest,
     ReviewResponse,
-    SourceRef,
+    SourceManifestEntry,
     StepState,
     StepStatus,
     VerdictLabel,
@@ -78,161 +89,196 @@ class MarkdownRenderer:
         debate: DebateResult,
         decision: JudgeDecision,
     ) -> str:
-        lines = [
-            f"# Earnings Review: {request.ticker} {request.fiscal_period}",
-            "",
-            "## Verdict",
-            "",
-            decision.verdict.value.title(),
-            "",
-            f"Confidence: {decision.confidence:.2f}",
-            "",
-            "## Summary",
-            "",
-            decision.summary,
-            "",
-            "## Evidence Matrix",
-            "",
-            *evidence_matrix_lines([*decision.positive_evidence, *decision.negative_evidence]),
-            "",
-            "## Agent Analysis",
-            "",
-            *self._agent_analysis_lines(brief),
-            "",
-            "## Positive Evidence",
-            "",
-        ]
-        lines.extend(f"- {item.summary}" for item in decision.positive_evidence)
-        lines.extend(["", "## Negative Evidence", ""])
-        lines.extend(f"- {item.summary}" for item in decision.negative_evidence)
-        lines.extend(
-            [
-                "",
-                "## EPS Outlook",
-                "",
-                decision.eps_outlook,
-                "",
-                f"Reason: {self._eps_outlook_reason(brief, decision)}",
-                "",
-                "## FCF Outlook",
-                "",
-                decision.fcf_outlook,
-                "",
-                f"Reason: {self._fcf_outlook_reason(brief, decision)}",
-                "",
-                "## Bull Case",
-                "",
-                debate.bull_case,
-                "",
-                "## Bear Case",
-                "",
-                debate.bear_case,
-                "",
-                "## Analyst Brief",
-                "",
-                brief.synthesis,
-                "",
-                "## Source Inventory",
-                "",
-                *source_inventory_lines(brief, decision),
-                "",
-                "## Missing Data Caveats",
-                "",
-                *missing_data_lines(brief, decision),
-                "",
-                "## Sources",
-                "",
-                *self._source_lines(brief),
-                "",
-                "_This report is an earnings analysis artifact and is not investment advice._",
-            ]
+        matrix = self.build_report_matrix(
+            request=request,
+            brief=brief,
+            debate=debate,
+            decision=decision,
         )
-        return "\n".join(lines).strip() + "\n"
+        return ReportRenderer().render(
+            request=request,
+            brief=brief,
+            debate=debate,
+            decision=decision,
+            matrix=matrix,
+        )
 
-    def _agent_analysis_lines(self, brief: AnalysisBrief) -> list[str]:
-        findings = [
+    def build_report_matrix(
+        self,
+        *,
+        request: ReviewRequest,
+        brief: AnalysisBrief,
+        debate: DebateResult,
+        decision: JudgeDecision,
+    ) -> ReportMatrix:
+        evidence_items = self._matrix_evidence_items(brief, debate, decision)
+        return ReportMatrix(
+            source_manifest=self._source_manifest(request, evidence_items),
+            evidence_items=evidence_items,
+            claim_records=self._claim_records(
+                evidence_items,
+                decision,
+                request.fiscal_period,
+            ),
+            decision_uses=self._decision_uses(evidence_items, decision),
+            missing_data_items=self._missing_data_items(brief),
+        )
+
+    def _matrix_evidence_items(
+        self,
+        brief: AnalysisBrief,
+        debate: DebateResult,
+        decision: JudgeDecision,
+    ) -> list[EvidenceItem]:
+        items: list[EvidenceItem] = [
+            *brief.positive_evidence_pool,
+            *brief.negative_evidence_pool,
+            *brief.risk_evidence_pool,
+            *debate.strongest_positive_evidence,
+            *debate.strongest_negative_evidence,
+            *decision.positive_evidence,
+            *decision.negative_evidence,
+        ]
+        for finding in (
             brief.earnings_quality_finding,
             brief.cash_flow_risk_finding,
             brief.management_intent_finding,
             brief.guidance_finding,
-        ]
-        lines: list[str] = []
-        for finding in findings:
-            lines.append(
-                f"- **{finding.agent_name}** ({finding.stance}, "
-                f"confidence {finding.confidence:.2f}): {finding.handoff_summary}"
-            )
-        return lines
+        ):
+            items.extend(finding.key_evidence)
+            items.extend(finding.counter_evidence)
 
-    def _eps_outlook_reason(self, brief: AnalysisBrief, decision: JudgeDecision) -> str:
-        if decision.eps_outlook_reason:
-            return decision.eps_outlook_reason
-        parts = [
-            brief.earnings_quality_finding.handoff_summary,
-            brief.management_intent_finding.handoff_summary,
-            brief.guidance_finding.handoff_summary,
-        ]
-        return self._compact_reason(parts, fallback=decision.rationale)
-
-    def _fcf_outlook_reason(self, brief: AnalysisBrief, decision: JudgeDecision) -> str:
-        if decision.fcf_outlook_reason:
-            return decision.fcf_outlook_reason
-        parts = [
-            brief.cash_flow_risk_finding.handoff_summary,
-            brief.management_intent_finding.handoff_summary,
-            brief.guidance_finding.handoff_summary,
-        ]
-        return self._compact_reason(parts, fallback=decision.rationale)
-
-    def _compact_reason(self, parts: list[str], *, fallback: str) -> str:
-        text = " ".join(part.strip() for part in parts if part and part.strip()).strip()
-        if not text:
-            text = fallback
-        return text[:1200]
-
-    def _source_lines(self, brief: AnalysisBrief) -> list[str]:
-        findings = [
-            brief.earnings_quality_finding,
-            brief.cash_flow_risk_finding,
-            brief.management_intent_finding,
-            brief.guidance_finding,
-        ]
-        lines: list[str] = []
-        for finding in findings:
-            lines.append(f"### {finding.agent_name}")
-            refs = self._unique_source_refs([*finding.key_evidence, *finding.counter_evidence])
-            if not refs:
-                lines.append("- No source references emitted.")
-                continue
-            for ref in refs:
-                title = ref.title or ref.source_id
-                url = str(ref.url) if ref.url else "no URL in source_ref"
-                locator = ref.metric_name or ref.section_id or ref.document_id or "source"
-                lines.append(f"- `{ref.source_id}` ({locator}): {title} — {url}")
-        return lines
-
-    def _unique_source_refs(self, items: list[EvidenceItem]) -> list[SourceRef]:
-        seen: set[
-            tuple[str, str, str | None, str | None, str | None, int | None, str | None, str | None]
-        ] = set()
-        refs: list[SourceRef] = []
+        by_id: dict[str, EvidenceItem] = {}
         for item in items:
+            by_id.setdefault(item.evidence_id, item)
+        return list(by_id.values())
+
+    def _source_manifest(
+        self,
+        request: ReviewRequest,
+        evidence_items: list[EvidenceItem],
+    ) -> list[SourceManifestEntry]:
+        if request.source_manifest:
+            return list(request.source_manifest)
+
+        by_id: dict[str, SourceManifestEntry] = {}
+        for item in evidence_items:
             ref = item.source_ref
-            key = (
+            by_id.setdefault(
                 ref.source_id,
-                ref.source_type.value,
-                ref.document_id,
-                ref.section_id,
-                ref.metric_name,
-                ref.page,
-                ref.title,
-                str(ref.url) if ref.url else None,
+                SourceManifestEntry(
+                    source_id=ref.source_id,
+                    source_type=ref.source_type,
+                    document_id=ref.document_id,
+                    title=ref.title,
+                    url=ref.url,
+                    section_id=ref.section_id,
+                    metric_name=ref.metric_name,
+                    page=ref.page,
+                    line_range=ref.line_range,
+                    reported_period=ref.reported_period,
+                    as_of_date=ref.as_of_date,
+                ),
             )
-            if key in seen:
-                continue
-            seen.add(key)
-            refs.append(ref)
-        return refs
+        return list(by_id.values())
+
+    def _claim_records(
+        self,
+        evidence_items: list[EvidenceItem],
+        decision: JudgeDecision,
+        fiscal_period: str,
+    ) -> list[ClaimRecord]:
+        return [
+            ClaimRecord(
+                claim_id=self._claim_id(item),
+                claim_type=ClaimType.FACT,
+                time_scope=self._evidence_time_scope(item, fiscal_period),
+                claim=item.summary,
+                evidence_ids=[item.evidence_id],
+                interpretation=item.detail,
+                implication=self._evidence_implication(item, decision),
+                confidence=item.confidence,
+            )
+            for item in evidence_items
+        ]
+
+    def _decision_uses(
+        self,
+        evidence_items: list[EvidenceItem],
+        decision: JudgeDecision,
+    ) -> list[DecisionUse]:
+        decision_evidence_ids = {
+            item.evidence_id: item.polarity
+            for item in [*decision.positive_evidence, *decision.negative_evidence]
+        }
+        uses: list[DecisionUse] = []
+        for item in evidence_items:
+            polarity = decision_evidence_ids.get(item.evidence_id)
+            if polarity == EvidencePolarity.POSITIVE:
+                treatment = JudgeTreatment.SUPPORTING
+                rationale = decision.rationale
+            elif polarity in {EvidencePolarity.NEGATIVE, EvidencePolarity.RISK}:
+                treatment = JudgeTreatment.COUNTER_EVIDENCE
+                rationale = decision.rationale
+            else:
+                treatment = JudgeTreatment.NOT_USED
+                rationale = (
+                    "Evidence was retained in the matrix but not explicitly used by the judge."
+                )
+            uses.append(
+                DecisionUse(
+                    decision_use_id=self._safe_id(f"decision:{item.evidence_id}"),
+                    treatment=treatment,
+                    claim_id=self._claim_id(item),
+                    decisive_evidence_ids=([item.evidence_id] if polarity is not None else []),
+                    rationale=rationale,
+                    verdict_impact=polarity or item.polarity,
+                    confidence_impact=0.0,
+                )
+            )
+        return uses
+
+    def _missing_data_items(self, brief: AnalysisBrief) -> list[MissingDataItem]:
+        items: list[MissingDataItem] = []
+        for finding in (
+            brief.earnings_quality_finding,
+            brief.cash_flow_risk_finding,
+            brief.management_intent_finding,
+            brief.guidance_finding,
+        ):
+            for index, missing in enumerate(finding.missing_data, start=1):
+                items.append(
+                    MissingDataItem(
+                        missing_data_id=self._safe_id(f"missing:{finding.agent_name}:{index}"),
+                        topic=finding.agent_name,
+                        reason=missing,
+                        materiality="medium",
+                    )
+                )
+        return items
+
+    def _claim_id(self, item: EvidenceItem) -> str:
+        return self._safe_id(f"claim:{item.evidence_id}")
+
+    def _safe_id(self, value: str) -> str:
+        normalized = re.sub(r"[^A-Za-z0-9_.:-]+", "-", value).strip("-")
+        return (normalized or "item")[:100]
+
+    def _evidence_time_scope(self, item: EvidenceItem, fiscal_period: str) -> str:
+        return str(
+            item.reported_period
+            or item.as_of_date
+            or item.source_ref.reported_period
+            or item.source_ref.as_of_date
+            or fiscal_period
+        )
+
+    def _evidence_implication(self, item: EvidenceItem, decision: JudgeDecision) -> str:
+        if item.polarity == EvidencePolarity.POSITIVE:
+            return decision.eps_outlook_reason
+        if item.polarity in {EvidencePolarity.NEGATIVE, EvidencePolarity.RISK}:
+            return decision.fcf_outlook_reason
+        return decision.rationale
 
 
 class ReviewWorkflow:
@@ -426,7 +472,11 @@ class ReviewWorkflow:
         request: ReviewRequest,
         metrics: FinancialMetrics,
         sections: list[DocumentSection],
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | Mapping[AgentRole, dict[str, Any]]:
+        routed_contexts = self._build_routed_agent_contexts(request, metrics, sections)
+        if routed_contexts is not None:
+            return routed_contexts
+
         run_spec = {
             "ticker": request.ticker,
             "fiscal_period": request.fiscal_period,
@@ -484,6 +534,42 @@ class ReviewWorkflow:
             "guidance_assumptions_sections": by_topic["guidance"] + by_topic["risk"],
             "prior_guidance_track_record": [],
             "management_intent_handoff": None,
+        }
+
+    def _build_routed_agent_contexts(
+        self,
+        request: ReviewRequest,
+        metrics: FinancialMetrics,
+        sections: list[DocumentSection],
+    ) -> Mapping[AgentRole, dict[str, Any]] | None:
+        if not request.source_manifest or request.context_budget is None:
+            return None
+
+        normalized_request = NormalizedReviewRequest(
+            schema_version="runtime-review-request.v1",
+            request_id=request.request_id or f"{request.ticker}:{request.fiscal_period}:runtime",
+            ticker=request.ticker,
+            fiscal_period=request.fiscal_period,
+            financial_metrics=metrics,
+            document_sections=sections,
+            source_manifest=request.source_manifest,
+            context_budget=request.context_budget,
+            include_markdown=request.include_markdown,
+            purpose=request.purpose,
+            is_investment_advice=request.is_investment_advice,
+            dry_run=False,
+        )
+        routed = ContextRouter().route(normalized_request)
+        return {
+            role: role_context.context
+            for role, role_context in routed.by_role.items()
+            if role
+            in {
+                AgentRole.EARNINGS_QUALITY,
+                AgentRole.CASH_FLOW_RISK,
+                AgentRole.MANAGEMENT_INTENT,
+                AgentRole.GUIDANCE,
+            }
         }
 
     def _sections_by_topic(

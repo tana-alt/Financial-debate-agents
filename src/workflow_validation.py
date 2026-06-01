@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
+from datetime import date
 from typing import Any, TypeVar
 
 from pydantic import BaseModel
@@ -24,6 +26,7 @@ from .workflow_models import (
     JudgeDecision,
     ManagementIntentFinding,
     ReviewRequest,
+    SourceManifestEntry,
     SourceRef,
     StepState,
     StepStatus,
@@ -31,7 +34,22 @@ from .workflow_models import (
 )
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
-SourceSignature = tuple[str, str, str | None, str | None, str | None, int | None, str | None]
+LineRangeSignature = tuple[int, int] | None
+SourceSignature = tuple[
+    str,
+    str,
+    str | None,
+    str | None,
+    str | None,
+    int | None,
+    str | None,
+    str | None,
+    str | None,
+    date | None,
+    int | None,
+    int | None,
+    LineRangeSignature,
+]
 
 
 class WorkflowValidationError(ValueError):
@@ -47,6 +65,14 @@ INVESTMENT_ADVICE_PATTERNS = (
         re.IGNORECASE,
     ),
     re.compile(r"\byou\s+should\s+(buy|sell|hold)\b", re.IGNORECASE),
+    re.compile(
+        r"\b(initiate|open|take|add\s+to|establish|build)\s+"
+        r"(a\s+)?(long|short)\s+position\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\b(go|going)\s+(long|short)\b", re.IGNORECASE),
+    re.compile(r"\b(long|short)\s+(the\s+)?(stock|shares)\b", re.IGNORECASE),
+    re.compile(r"\b(long|short)\s+(?-i:[A-Z]{1,6})\b", re.IGNORECASE),
     re.compile(r"\b(price target|target price)\b", re.IGNORECASE),
     re.compile(r"目標株価"),
     re.compile(r"売買推奨|投資推奨|買い推奨|売り推奨|購入を推奨"),
@@ -65,7 +91,7 @@ class WorkflowValidationGate:
         financial_findings: list[BaseModel],
         presentation_findings: list[BaseModel],
     ) -> AnalysisBrief:
-        canonical_sources = self.canonical_source_refs(metrics, sections)
+        canonical_sources = self.canonical_source_refs(metrics, sections, request.source_manifest)
         allowed_source_ids = set(canonical_sources)
         (
             earnings_quality_finding,
@@ -427,7 +453,15 @@ class WorkflowValidationGate:
         self,
         metrics: FinancialMetrics,
         sections: list[DocumentSection],
+        source_manifest: list[SourceManifestEntry] | None = None,
     ) -> dict[SourceSignature, SourceRef]:
+        if source_manifest:
+            return {
+                self.source_signature(source): source
+                for source in [
+                    self.source_ref_from_manifest_entry(source) for source in source_manifest
+                ]
+            }
         return {
             self.source_signature(source): source
             for source in [
@@ -436,31 +470,66 @@ class WorkflowValidationGate:
             ]
         }
 
+    def source_ref_from_manifest_entry(self, source: SourceManifestEntry) -> SourceRef:
+        return SourceRef(
+            source_id=source.source_id,
+            source_type=source.source_type,
+            url=source.url,
+            document_id=source.document_id,
+            section_id=source.section_id,
+            metric_name=source.metric_name,
+            page=source.page,
+            title=source.title,
+            line_range=source.line_range,
+            reported_period=source.reported_period,
+            as_of_date=source.as_of_date,
+        )
+
     def canonicalize_evidence_sources(
         self,
         items: list[EvidenceItem],
         canonical_sources: dict[SourceSignature, SourceRef],
     ) -> list[EvidenceItem]:
-        return [
-            item.model_copy(
-                update={"source_ref": canonical_sources[self.source_signature(item.source_ref)]}
+        canonicalized: list[EvidenceItem] = []
+        for item in items:
+            matched_signature = self.matching_source_signature(
+                item.source_ref,
+                canonical_sources,
             )
-            for item in items
-        ]
+            if matched_signature is None:
+                raise WorkflowValidationError(
+                    f"evidence {item.evidence_id!r} references unknown source "
+                    f"{item.source_ref.source_id!r}"
+                )
+            canonicalized.append(
+                item.model_copy(update={"source_ref": canonical_sources[matched_signature]})
+            )
+        return canonicalized
 
     def validate_evidence_sources(
         self,
         items: list[EvidenceItem],
         allowed_source_ids: set[SourceSignature],
     ) -> None:
+        allowed_source_names = {source_id for source_id, *_ in allowed_source_ids}
         for item in items:
-            if self.source_signature(item.source_ref) not in allowed_source_ids:
+            if self.matching_source_signature(item.source_ref, allowed_source_ids) is not None:
+                continue
+            if item.source_ref.source_id in allowed_source_names:
+                raise WorkflowValidationError(
+                    f"evidence {item.evidence_id!r} references source "
+                    f"{item.source_ref.source_id!r} with mismatched locator"
+                )
+            else:
                 raise WorkflowValidationError(
                     f"evidence {item.evidence_id!r} references unknown source "
                     f"{item.source_ref.source_id!r}"
                 )
 
     def source_signature(self, source: SourceRef) -> SourceSignature:
+        line_range = None
+        if source.line_range is not None:
+            line_range = (source.line_range.start, source.line_range.end)
         return (
             source.source_id,
             source.source_type.value,
@@ -469,7 +538,41 @@ class WorkflowValidationGate:
             source.metric_name,
             source.page,
             source.title,
+            str(source.url) if source.url is not None else None,
+            source.reported_period,
+            source.as_of_date,
+            source.line_start,
+            source.line_end,
+            line_range,
         )
+
+    def matching_source_signature(
+        self,
+        source: SourceRef,
+        allowed_source_ids: Iterable[SourceSignature],
+    ) -> SourceSignature | None:
+        signature = self.source_signature(source)
+        allowed_signatures = set(allowed_source_ids)
+        if signature in allowed_signatures:
+            return signature
+        for candidate in allowed_signatures:
+            if self.source_signatures_are_compatible(signature, candidate):
+                return candidate
+        return None
+
+    def source_signatures_are_compatible(
+        self,
+        emitted: SourceSignature,
+        canonical: SourceSignature,
+    ) -> bool:
+        if emitted[:6] != canonical[:6]:
+            return False
+        for emitted_value, canonical_value in zip(emitted[6:], canonical[6:], strict=True):
+            if emitted_value is None or canonical_value is None:
+                continue
+            if emitted_value != canonical_value:
+                return False
+        return True
 
     def extract_role_name(self, model: BaseModel) -> str:
         for field_name in ("agent_name", "agent_role", "role"):

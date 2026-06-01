@@ -31,14 +31,16 @@ def test_fake_provider_runs_seven_agent_workflow_without_keys(monkeypatch):
     assert provider.calls.count("JudgeAgent") == 1
     assert response.markdown_report
     for section in (
-        "## Verdict",
-        "## Summary",
-        "## Agent Analysis",
-        "## Positive Evidence",
-        "## Negative Evidence",
-        "## EPS Outlook",
-        "## FCF Outlook",
-        "Reason:",
-        "## Sources",
+        "## Judge Rationale",
+        "## Bull vs Bear Tension",
+        "## Evidence Matrix",
+        "## Agent Contribution",
+        "## Uncertainty And Missing Data",
+        "## Quality Gates",
+        "## Source Appendix",
+        "## Disclaimer",
     ):
         assert section in response.markdown_report
+    assert "| Claim ID | Fact | Interpretation | Implication | Time scope |" in (
+        response.markdown_report
+    )

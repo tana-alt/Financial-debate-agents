@@ -5,12 +5,13 @@ import pytest
 
 from src.preprocessor import (
     build_financial_metrics,
+    build_normalized_review_request,
     calculate_surprise_pct,
     document_files_to_sections,
     safe_float,
     segment_filing,
 )
-from src.workflow_models import DocumentFile
+from src.workflow_models import DocumentFile, DocumentSection, SourceRef, SourceType
 
 
 def test_safe_float_discards_invalid_external_values():
@@ -36,6 +37,92 @@ def test_build_financial_metrics_computes_eps_surprise():
 
     assert metrics.ticker == "NVDA"
     assert round(metrics.eps_surprise_pct or 0, 2) == 8.0
+
+
+def test_build_normalized_review_request_acquires_filing_url_and_drops_raw_fields(
+    monkeypatch,
+):
+    filing_url = "https://www.sec.gov/Archives/example/sample.htm"
+    calls = {}
+
+    def fake_fetch_filing_html(url):
+        calls["fetch_url"] = url
+        return "<html>mock filing</html>"
+
+    def fake_segment_filing(html, url=None):
+        calls["segment_html"] = html
+        calls["segment_url"] = url
+        return [
+            DocumentSection(
+                section_id="filing:guidance",
+                source_ref=SourceRef(
+                    source_id="filing:guidance",
+                    source_type=SourceType.FILING,
+                    url=filing_url,
+                    document_id="filing-html",
+                    section_id="filing:guidance",
+                    title="Filing guidance",
+                ),
+                heading="guidance",
+                text="Management guided to durable demand and elevated investment.",
+            )
+        ]
+
+    monkeypatch.setattr("src.preprocessor.fetch_filing_html", fake_fetch_filing_html)
+    monkeypatch.setattr("src.preprocessor.segment_filing", fake_segment_filing)
+    monkeypatch.setattr(
+        "src.preprocessor.fetch_consensus",
+        lambda ticker, fiscal_period: build_financial_metrics(
+            ticker=ticker,
+            fiscal_period=fiscal_period,
+            eps=0.81,
+            eps_consensus=0.75,
+        ),
+    )
+
+    request = build_normalized_review_request(
+        {
+            "ticker": "nvda",
+            "fiscal_period": "2025Q3",
+            "filing_url": filing_url,
+        }
+    )
+
+    payload = request.model_dump(mode="json")
+    assert request.ticker == "NVDA"
+    assert calls == {
+        "fetch_url": filing_url,
+        "segment_html": "<html>mock filing</html>",
+        "segment_url": filing_url,
+    }
+    assert "filing_url" not in payload
+    assert "document_files" not in payload
+    assert request.registered_source_ids == {
+        "financial_api:NVDA:2025Q3",
+        "filing:guidance",
+    }
+    assert payload["document_sections"][0]["source_ref"]["url"] == filing_url
+
+
+def test_build_normalized_review_request_converts_raw_text_to_manifested_section():
+    request = build_normalized_review_request(
+        {
+            "ticker": "nvda",
+            "fiscal_period": "2025Q3",
+            "financial_metrics": build_financial_metrics(
+                ticker="NVDA",
+                fiscal_period="2025Q3",
+                eps=0.81,
+                eps_consensus=0.75,
+            ).model_dump(mode="json"),
+            "raw_text": "Guidance improved.\n\nFree cash flow was pressured by investment.",
+        }
+    )
+
+    payload = request.model_dump(mode="json")
+    assert "raw_text" not in payload
+    assert request.document_sections[0].section_id == "raw-text:NVDA:2025Q3:section-1"
+    assert request.document_sections[0].source_ref.source_id in request.registered_source_ids
 
 
 def test_fetch_consensus_uses_yfinance_revenue_alias(monkeypatch):
