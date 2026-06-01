@@ -414,13 +414,13 @@ def test_tracked_top_level_roots_stay_explicit() -> None:
 
 
 def test_agent_environment_restore_uses_templates_not_runtime_state() -> None:
-    readme = read_text("README.md")
+    verification_reference = read_text("docs/reference/verification-ci-and-pr-reference.md")
     setup_script = read_text("scripts/setup-agent-environment.sh")
     codex_template = read_text("templates/codex-config.toml.example")
 
-    assert "scripts/setup-agent-environment.sh" in readme
-    assert "make doctor" in readme
-    assert "make check-foundation" in readme
+    assert "scripts/setup-agent-environment.sh" in verification_reference
+    assert "make doctor" in verification_reference
+    assert "make check-foundation" in verification_reference
     assert "templates/serena-project.yml" in setup_script
     assert "templates/codex-config.toml.example" in setup_script
     assert ".serena/project.yml" in setup_script
