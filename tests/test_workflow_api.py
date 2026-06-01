@@ -17,6 +17,7 @@ from src.workflow_models import (
     SourceType,
 )
 from src.workflow_validation import WorkflowValidationGate
+from tests.test_api_contract import normalized_review_payload
 
 
 class FakeLLM:
@@ -98,7 +99,8 @@ class FakeLLM:
                 "source_id": "filing:eps",
                 "source_type": "filing",
                 "document_id": "10q-2025q3",
-                "section_id": "eps"
+                "section_id": "eps",
+                "reported_period": "2025Q3"
               },
               "confidence": 0.70
             }
@@ -136,7 +138,8 @@ class FakeLLM:
                 "source_id": "filing:risk",
                 "source_type": "filing",
                 "document_id": "10q-2025q3",
-                "section_id": "risk"
+                "section_id": "risk",
+                "reported_period": "2025Q3"
               },
               "confidence": 0.70
             }
@@ -175,7 +178,8 @@ class FakeLLM:
                 "source_id": "filing:eps",
                 "source_type": "filing",
                 "document_id": "10q-2025q3",
-                "section_id": "eps"
+                "section_id": "eps",
+                "reported_period": "2025Q3"
               },
               "confidence": 0.75
             }
@@ -191,7 +195,8 @@ class FakeLLM:
                 "source_id": "filing:risk",
                 "source_type": "filing",
                 "document_id": "10q-2025q3",
-                "section_id": "risk"
+                "section_id": "risk",
+                "reported_period": "2025Q3"
               },
               "confidence": 0.70
             }
@@ -212,11 +217,12 @@ class FakeLLM:
           "summary": "{summary}",
           "detail": "{summary}",
           "impact_areas": ["overall"],
-          "source_ref": {{
+            "source_ref": {{
             "source_id": "{source_id}",
             "source_type": "filing",
             "document_id": "10q-2025q3",
-            "section_id": "{section_id}"
+            "section_id": "{section_id}",
+            "reported_period": "2025Q3"
           }},
           "confidence": 0.70
         }}
@@ -266,6 +272,7 @@ def _source_ref(section_id: str) -> dict:
         "source_type": "filing",
         "document_id": "10q-2025q3",
         "section_id": section_id,
+        "reported_period": "2025Q3",
     }
 
 
@@ -323,7 +330,21 @@ def test_review_workflow_runs_ordered_api_first_steps(monkeypatch):
     assert response.ticker == "NVDA"
     assert response.fiscal_period == "2025Q3"
     assert response.judge_decision.verdict.value == "good"
-    assert "## Negative Evidence" in response.markdown_report
+    for section in (
+        "## Judge Rationale",
+        "## Bull vs Bear Tension",
+        "## Evidence Matrix",
+        "## Agent Contribution",
+        "## Uncertainty And Missing Data",
+        "## Quality Gates",
+        "## Source Appendix",
+        "## Disclaimer",
+    ):
+        assert section in response.markdown_report
+    assert "| Claim ID | Fact | Interpretation | Implication | Time scope |" in (
+        response.markdown_report
+    )
+    assert "2025Q3" in response.markdown_report
     assert [step.step.value for step in response.steps] == [
         "data_ingestion",
         "financial_agents",
@@ -471,7 +492,7 @@ def test_reviews_endpoint_delegates_to_workflow():
     api.app.dependency_overrides[api.get_workflow] = override_workflow
     try:
         client = TestClient(api.app)
-        response = client.post("/reviews", json=_request_payload())
+        response = client.post("/reviews", json=normalized_review_payload(dry_run=False))
     finally:
         api.app.dependency_overrides.clear()
 
@@ -481,3 +502,5 @@ def test_reviews_endpoint_delegates_to_workflow():
     assert body["judge_decision"]["verdict"] == "good"
     assert body["steps"][-1]["step"] == "markdown_renderer"
     assert "# Earnings Review: NVDA 2025Q3" in body["markdown_report"]
+    assert "## Evidence Matrix" in body["markdown_report"]
+    assert "## Quality Gates" in body["markdown_report"]

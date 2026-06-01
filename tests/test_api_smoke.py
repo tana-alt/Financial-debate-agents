@@ -30,11 +30,10 @@ def test_reviews_api_fake_smoke_returns_markdown_report(monkeypatch):
     body = response.json()
     assert body["markdown_report"]
     for section in (
-        "## Verdict",
-        "## Positive Evidence",
-        "## Negative Evidence",
-        "## EPS Outlook",
-        "## FCF Outlook",
+        "## Judge Rationale",
+        "## Evidence Matrix",
+        "## Quality Gates",
+        "## Disclaimer",
     ):
         assert section in body["markdown_report"]
 
