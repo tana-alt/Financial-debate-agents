@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Mapping, Sequence
 from math import isfinite
 from pathlib import Path
 from typing import Any
@@ -21,11 +22,14 @@ from pydantic import ValidationError
 
 from .metric_normalizer import resolve_canonical_metric
 from .workflow_models import (
+    ContextBudget,
     DocumentFile,
     DocumentSection,
     FinancialMetrics,
     NormalizedMetric,
+    NormalizedReviewRequest,
     SourceRef,
+    SourceManifestEntry,
     SourceType,
     UnmappedMetric,
 )
@@ -43,6 +47,12 @@ SECTION_PATTERNS = {
 
 SUPPORTED_DOCUMENT_FILE_SUFFIXES = {".pdf", ".txt", ".text", ".md"}
 MAX_DOCUMENT_SECTION_CHARS = 8000
+NORMALIZED_REVIEW_SCHEMA_VERSION = "normalized-review-request.v1"
+DEFAULT_CONTEXT_BUDGET = {
+    "max_input_tokens": 6000,
+    "max_output_tokens": 2000,
+    "max_total_tokens": 10000,
+}
 
 
 class DocumentFileValidationError(ValueError):
@@ -83,6 +93,213 @@ def _chunk_text(text: str, *, max_chars: int = MAX_DOCUMENT_SECTION_CHARS) -> li
     if current:
         chunks.append(current)
     return [chunk for chunk in chunks if chunk]
+
+
+def build_normalized_review_request(
+    payload: Mapping[str, Any] | NormalizedReviewRequest,
+) -> NormalizedReviewRequest:
+    """Build normalized workflow input from CLI/local acquisition payloads."""
+    if isinstance(payload, NormalizedReviewRequest):
+        return payload
+
+    data = dict(payload)
+    if _looks_like_normalized_payload(data):
+        return NormalizedReviewRequest.model_validate(data)
+
+    ticker = _required_text(data, "ticker").upper()
+    fiscal_period = _required_text(data, "fiscal_period", alias="quarter")
+    sections = _document_sections_from_local_payload(
+        data,
+        ticker=ticker,
+        fiscal_period=fiscal_period,
+    )
+
+    if not sections and data.get("filing_url") is not None:
+        filing_url = str(data["filing_url"])
+        sections.extend(segment_filing(fetch_filing_html(filing_url), url=filing_url))
+
+    if not sections:
+        raise ValueError(
+            "document_sections, document_files, raw_text, local_path, or filing_url is required"
+        )
+
+    metrics = _financial_metrics_from_payload(data, ticker=ticker, fiscal_period=fiscal_period)
+    source_manifest = _source_manifest_from_refs(metrics, sections)
+    context_budget = ContextBudget.model_validate(
+        data.get("context_budget") or DEFAULT_CONTEXT_BUDGET
+    )
+
+    return NormalizedReviewRequest(
+        schema_version=str(data.get("schema_version") or NORMALIZED_REVIEW_SCHEMA_VERSION),
+        request_id=str(data.get("request_id") or _slug(f"{ticker}:{fiscal_period}")),
+        ticker=ticker,
+        fiscal_period=fiscal_period,
+        financial_metrics=metrics,
+        document_sections=sections,
+        source_manifest=source_manifest,
+        context_budget=context_budget,
+        include_markdown=data.get("include_markdown", True),
+        purpose=data.get("purpose", "earnings_review_not_investment_advice"),
+        is_investment_advice=data.get("is_investment_advice", False),
+        dry_run=data.get("dry_run", False),
+    )
+
+
+def _looks_like_normalized_payload(data: Mapping[str, Any]) -> bool:
+    return {"schema_version", "financial_metrics", "source_manifest", "context_budget"}.issubset(
+        data
+    )
+
+
+def _required_text(data: Mapping[str, Any], key: str, *, alias: str | None = None) -> str:
+    value = data.get(key)
+    if value is None and alias is not None:
+        value = data.get(alias)
+    if value is None or not str(value).strip():
+        if alias is None:
+            raise ValueError(f"{key} is required")
+        raise ValueError(f"{key} is required")
+    return str(value).strip()
+
+
+def _document_sections_from_local_payload(
+    data: Mapping[str, Any],
+    *,
+    ticker: str,
+    fiscal_period: str,
+) -> list[DocumentSection]:
+    sections = [
+        DocumentSection.model_validate(section)
+        for section in data.get("document_sections") or []
+    ]
+
+    document_files = [
+        DocumentFile.model_validate(document_file)
+        for document_file in data.get("document_files") or []
+    ]
+    document_files.extend(_local_path_document_files(data.get("local_path")))
+    if document_files:
+        sections.extend(document_files_to_sections(document_files))
+
+    if data.get("raw_text") is not None:
+        sections.extend(
+            _raw_text_to_sections(
+                str(data["raw_text"]),
+                ticker=ticker,
+                fiscal_period=fiscal_period,
+            )
+        )
+
+    return sections
+
+
+def _local_path_document_files(value: Any) -> list[DocumentFile]:
+    paths = _local_paths(value)
+    document_files: list[DocumentFile] = []
+    for index, path_value in enumerate(paths, start=1):
+        path = Path(path_value).expanduser()
+        suffix = f":{index}" if len(paths) > 1 else ""
+        document_id = _slug(f"local:{path.stem or 'document'}{suffix}")
+        document_files.append(
+            DocumentFile(
+                path=path_value,
+                source_type=SourceType.MANUAL_UPLOAD,
+                document_id=document_id,
+                title=path.name or "Local document",
+            )
+        )
+    return document_files
+
+
+def _local_paths(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, (str, Path)):
+        return [str(value)]
+    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray)):
+        return [str(path) for path in value]
+    raise ValueError("local_path must be a path string or list of path strings")
+
+
+def _raw_text_to_sections(
+    raw_text: str,
+    *,
+    ticker: str,
+    fiscal_period: str,
+) -> list[DocumentSection]:
+    text = _normalize_document_text(raw_text)
+    if not text:
+        raise DocumentFileValidationError("raw_text is empty")
+
+    document_id = _slug(f"raw-text:{ticker}:{fiscal_period}")
+    sections = []
+    for index, chunk in enumerate(_chunk_text(text), start=1):
+        section_id = _slug(f"{document_id}:section-{index}")
+        sections.append(
+            DocumentSection(
+                section_id=section_id,
+                source_ref=SourceRef(
+                    source_id=section_id,
+                    source_type=SourceType.MANUAL_UPLOAD,
+                    document_id=document_id,
+                    section_id=section_id,
+                    title="Raw text input",
+                ),
+                heading=f"Raw text input section {index}",
+                text=chunk,
+            )
+        )
+    return sections
+
+
+def _financial_metrics_from_payload(
+    data: Mapping[str, Any],
+    *,
+    ticker: str,
+    fiscal_period: str,
+) -> FinancialMetrics:
+    if data.get("financial_metrics") is None:
+        return fetch_consensus(ticker, fiscal_period)
+    return FinancialMetrics.model_validate(data["financial_metrics"])
+
+
+def _source_manifest_from_refs(
+    metrics: FinancialMetrics,
+    sections: list[DocumentSection],
+) -> list[SourceManifestEntry]:
+    manifest_by_id: dict[str, SourceManifestEntry] = {}
+    for source_ref in [*metrics.source_refs, *(section.source_ref for section in sections)]:
+        entry = _source_manifest_entry_from_ref(source_ref)
+        existing = manifest_by_id.get(entry.source_id)
+        if existing is not None:
+            if existing.model_dump(mode="json", exclude_none=True) != entry.model_dump(
+                mode="json", exclude_none=True
+            ):
+                raise ValueError(
+                    f"duplicate source_id has inconsistent metadata: {entry.source_id}"
+                )
+            continue
+        manifest_by_id[entry.source_id] = entry
+
+    if not manifest_by_id:
+        raise ValueError("source_manifest requires at least one source_ref")
+    return list(manifest_by_id.values())
+
+
+def _source_manifest_entry_from_ref(source_ref: SourceRef) -> SourceManifestEntry:
+    return SourceManifestEntry(
+        source_id=source_ref.source_id,
+        source_type=source_ref.source_type,
+        document_id=source_ref.document_id,
+        title=source_ref.title,
+        url=source_ref.url,
+        section_id=source_ref.section_id,
+        metric_name=source_ref.metric_name,
+        page=source_ref.page,
+        line_range=source_ref.line_range,
+        reported_period=source_ref.reported_period,
+        as_of_date=source_ref.as_of_date,
+    )
 
 
 def document_files_to_sections(document_files: list[DocumentFile]) -> list[DocumentSection]:
