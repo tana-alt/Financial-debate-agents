@@ -8,9 +8,10 @@ Evidence Aggregation -> Debate -> Judge -> MarkdownRenderer.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from datetime import date, datetime
 from enum import Enum
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import (
     AliasChoices,
@@ -21,6 +22,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from src.workflow_errors import WorkflowErrorCategory
 
 NonEmptyText = Annotated[str, Field(min_length=1)]
 
@@ -56,6 +59,42 @@ class EvidencePolarity(str, Enum):
     NEGATIVE = "negative"
     NEUTRAL = "neutral"
     RISK = "risk"
+
+
+class ClaimType(str, Enum):
+    FACT = "fact"
+    INTERPRETATION = "interpretation"
+    FORECAST = "forecast"
+    RISK = "risk"
+    LIMITATION = "limitation"
+    COUNTERPOINT = "counterpoint"
+
+
+class FactCheckStatus(str, Enum):
+    SUPPORTED = "supported"
+    PARTIALLY_SUPPORTED = "partially_supported"
+    CONTRADICTED = "contradicted"
+    UNVERIFIED = "unverified"
+    NOT_CHECKABLE = "not_checkable"
+
+
+class JudgeTreatment(str, Enum):
+    DECISIVE = "decisive"
+    SUPPORTING = "supporting"
+    COUNTER_EVIDENCE = "counter_evidence"
+    DISCOUNTED = "discounted"
+    NOT_USED = "not_used"
+
+
+class ReviewStatus(str, Enum):
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    DRY_RUN = "dry_run"
+
+
+class DryRunStatus(str, Enum):
+    PASSED = "passed"
+    FAILED = "failed"
 
 
 class ImpactArea(str, Enum):
@@ -119,6 +158,96 @@ LEGACY_AGENT_ROLE_VALUES = {
     "eval": AgentRole.JUDGE,
 }
 
+RAW_ACQUISITION_FIELDS = frozenset(
+    {
+        "filing_url",
+        "presentation_url",
+        "transcript_url",
+        "document_files",
+        "raw_text",
+        "local_path",
+    }
+)
+
+
+def raw_acquisition_fields_in(payload: Mapping[str, Any]) -> set[str]:
+    """Return raw acquisition fields present in a normalized API payload."""
+
+    return set(payload) & RAW_ACQUISITION_FIELDS
+
+
+def reject_raw_acquisition_fields(payload: Mapping[str, Any]) -> None:
+    raw_fields = sorted(raw_acquisition_fields_in(payload))
+    if raw_fields:
+        raise ValueError(
+            "raw acquisition fields are not accepted by normalized review input: "
+            f"{', '.join(raw_fields)}"
+        )
+
+
+def source_ids_from_manifest(source_manifest: list[SourceManifestEntry]) -> set[str]:
+    return {source.source_id for source in source_manifest}
+
+
+def source_manifest_by_id(
+    source_manifest: list[SourceManifestEntry],
+) -> dict[str, SourceManifestEntry]:
+    return {source.source_id: source for source in source_manifest}
+
+
+def validate_source_ref_registered_and_consistent(
+    source_ref: SourceRef,
+    source_manifest: list[SourceManifestEntry],
+    context: str,
+) -> None:
+    manifest_entry = source_manifest_by_id(source_manifest).get(source_ref.source_id)
+    if manifest_entry is None:
+        raise ValueError(f"unregistered source_id in {context}: {source_ref.source_id}")
+
+    if source_ref.source_type != manifest_entry.source_type:
+        raise ValueError(
+            "source_manifest mismatch in "
+            f"{context} for {source_ref.source_id}: source_type "
+            f"{source_ref.source_type.value} != {manifest_entry.source_type.value}"
+        )
+
+    fields_to_compare = (
+        "metric_name",
+        "document_id",
+        "section_id",
+        "page",
+        "reported_period",
+        "as_of_date",
+    )
+    for field_name in fields_to_compare:
+        source_value = getattr(source_ref, field_name)
+        manifest_value = getattr(manifest_entry, field_name)
+        if source_value is not None and manifest_value is not None and source_value != manifest_value:
+            raise ValueError(
+                "source_manifest mismatch in "
+                f"{context} for {source_ref.source_id}: {field_name} "
+                f"{source_value} != {manifest_value}"
+            )
+
+    if source_ref.url is not None and manifest_entry.url is not None:
+        if str(source_ref.url) != str(manifest_entry.url):
+            raise ValueError(
+                "source_manifest mismatch in "
+                f"{context} for {source_ref.source_id}: url "
+                f"{source_ref.url} != {manifest_entry.url}"
+            )
+
+
+class LineRange(WorkflowModel):
+    start: int = Field(ge=1)
+    end: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def validate_order(self) -> LineRange:
+        if self.end < self.start:
+            raise ValueError("line_range.end must be greater than or equal to line_range.start")
+        return self
+
 
 class SourceRef(WorkflowModel):
     """Traceable reference for source-backed claims.
@@ -142,7 +271,9 @@ class SourceRef(WorkflowModel):
     page: int | None = Field(default=None, ge=1)
     line_start: int | None = Field(default=None, ge=1)
     line_end: int | None = Field(default=None, ge=1)
+    line_range: LineRange | None = None
     metric_name: str | None = Field(default=None, max_length=120)
+    reported_period: str | None = Field(default=None, max_length=40)
     as_of_date: date | None = None
 
     @model_validator(mode="after")
@@ -163,6 +294,43 @@ class SourceRef(WorkflowModel):
         )
         if not has_document_locator:
             raise ValueError("document source_ref requires document_id, section_id, page, or url")
+        return self
+
+
+class SourceManifestEntry(WorkflowModel):
+    """Authoritative source registration for normalized workflow input."""
+
+    source_id: str = Field(
+        min_length=1,
+        max_length=80,
+        pattern=r"^[A-Za-z0-9_.:-]+$",
+        description="Stable ID referenced by sections, metrics, evidence, and report claims.",
+    )
+    source_type: SourceType
+    document_id: str | None = Field(default=None, max_length=120)
+    title: str | None = Field(default=None, max_length=300)
+    url: AnyUrl | None = None
+    section_id: str | None = Field(default=None, max_length=120)
+    metric_name: str | None = Field(default=None, max_length=120)
+    page: int | None = Field(default=None, ge=1)
+    line_range: LineRange | None = None
+    reported_period: str | None = Field(default=None, max_length=40)
+    as_of_date: date | None = None
+
+    @model_validator(mode="after")
+    def validate_locator(self) -> SourceManifestEntry:
+        if self.source_type in {SourceType.FINANCIAL_API, SourceType.DERIVED_METRIC}:
+            if not self.metric_name:
+                raise ValueError("financial source_manifest entry requires metric_name")
+            return self
+
+        has_document_locator = any(
+            [self.document_id, self.section_id, self.page is not None, self.url]
+        )
+        if not has_document_locator:
+            raise ValueError(
+                "document source_manifest entry requires document_id, section_id, page, or url"
+            )
         return self
 
 
@@ -299,6 +467,81 @@ class ReviewRequest(WorkflowModel):
         return self
 
 
+class ContextBudget(WorkflowModel):
+    max_input_tokens: int = Field(gt=0, le=2_000_000)
+    max_output_tokens: int = Field(gt=0, le=500_000)
+    max_total_tokens: int = Field(gt=0, le=2_000_000)
+
+    @model_validator(mode="after")
+    def validate_budget(self) -> ContextBudget:
+        if self.max_input_tokens + self.max_output_tokens > self.max_total_tokens:
+            raise ValueError("max_input_tokens plus max_output_tokens must fit max_total_tokens")
+        return self
+
+
+class NormalizedReviewRequest(WorkflowModel):
+    """Review input after external acquisition and normalization have completed."""
+
+    schema_version: str = Field(min_length=1, max_length=40)
+    request_id: str = Field(min_length=1, max_length=80)
+    ticker: str = Field(min_length=1, max_length=15)
+    fiscal_period: str = Field(pattern=r"^\d{4}Q[1-4]$")
+    financial_metrics: FinancialMetrics
+    document_sections: list[DocumentSection] = Field(default_factory=list, max_length=200)
+    source_manifest: list[SourceManifestEntry] = Field(min_length=1, max_length=200)
+    context_budget: ContextBudget
+    include_markdown: bool
+    purpose: Literal["earnings_review_not_investment_advice"]
+    is_investment_advice: Literal[False]
+    dry_run: bool
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_raw_fields(cls, data: Any) -> Any:
+        if isinstance(data, Mapping):
+            reject_raw_acquisition_fields(data)
+        return data
+
+    @field_validator("ticker", mode="before")
+    @classmethod
+    def normalize_ticker(cls, value: str) -> str:
+        normalized = str(value).upper().strip()
+        if not re.fullmatch(r"[A-Z0-9.\-]{1,15}", normalized):
+            raise ValueError("ticker must contain only letters, numbers, dots, or hyphens")
+        return normalized
+
+    @property
+    def registered_source_ids(self) -> set[str]:
+        return source_ids_from_manifest(self.source_manifest)
+
+    @model_validator(mode="after")
+    def validate_normalized_contract(self) -> NormalizedReviewRequest:
+        if self.financial_metrics.ticker != self.ticker:
+            raise ValueError("financial_metrics.ticker must match request ticker")
+        if self.financial_metrics.fiscal_period != self.fiscal_period:
+            raise ValueError("financial_metrics.fiscal_period must match request fiscal_period")
+
+        registered_ids = self.registered_source_ids
+        if len(registered_ids) != len(self.source_manifest):
+            raise ValueError("source_manifest.source_id values must be unique")
+
+        for section in self.document_sections:
+            validate_source_ref_registered_and_consistent(
+                section.source_ref,
+                self.source_manifest,
+                "document_sections",
+            )
+
+        for source_ref in self.financial_metrics.source_refs:
+            validate_source_ref_registered_and_consistent(
+                source_ref,
+                self.source_manifest,
+                "financial_metrics.source_refs",
+            )
+
+        return self
+
+
 class EvidenceItem(WorkflowModel):
     evidence_id: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_.:-]+$")
     polarity: EvidencePolarity
@@ -309,7 +552,96 @@ class EvidenceItem(WorkflowModel):
     metric_name: str | None = Field(default=None, max_length=120)
     value: float | None = None
     unit: str | None = Field(default=None, max_length=40)
+    quote: str | None = Field(default=None, max_length=1000)
+    reported_period: str | None = Field(default=None, max_length=40)
+    as_of_date: date | None = None
+    fact_check_status: FactCheckStatus = FactCheckStatus.UNVERIFIED
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+
+
+class ClaimRecord(WorkflowModel):
+    claim_id: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_.:-]+$")
+    claim_type: ClaimType
+    agent_role: AgentRole | None = None
+    time_scope: str = Field(min_length=1, max_length=80)
+    claim: str = Field(min_length=1, max_length=1200)
+    evidence_ids: list[str] = Field(default_factory=list, max_length=20)
+    counter_evidence_ids: list[str] = Field(default_factory=list, max_length=20)
+    interpretation: str = Field(min_length=1, max_length=2000)
+    implication: str = Field(min_length=1, max_length=1200)
+    confidence: float = Field(ge=0.0, le=1.0)
+    limitations: list[NonEmptyText] = Field(default_factory=list, max_length=8)
+
+    @model_validator(mode="after")
+    def validate_evidence_ids(self) -> ClaimRecord:
+        all_ids = self.evidence_ids + self.counter_evidence_ids
+        if len(all_ids) != len(set(all_ids)):
+            raise ValueError("claim evidence_ids must be unique across support and counter evidence")
+        return self
+
+
+class DecisionUse(WorkflowModel):
+    decision_use_id: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_.:-]+$")
+    treatment: JudgeTreatment
+    claim_id: str | None = Field(default=None, max_length=100, pattern=r"^[A-Za-z0-9_.:-]+$")
+    decisive_evidence_ids: list[str] = Field(default_factory=list, max_length=20)
+    rationale: str = Field(min_length=1, max_length=1200)
+    verdict_impact: EvidencePolarity
+    confidence_impact: float = Field(ge=-1.0, le=1.0)
+
+
+class MissingDataItem(WorkflowModel):
+    missing_data_id: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_.:-]+$")
+    topic: str = Field(min_length=1, max_length=200)
+    reason: str = Field(min_length=1, max_length=1200)
+    materiality: Literal["low", "medium", "high"]
+    requested_source_type: SourceType | None = None
+    blocks_verdict: bool = False
+
+
+class ReportMatrix(WorkflowModel):
+    """Traceable report contract separating facts, claims, and judge usage."""
+
+    source_manifest: list[SourceManifestEntry] = Field(min_length=1, max_length=200)
+    evidence_items: list[EvidenceItem] = Field(default_factory=list, max_length=100)
+    claim_records: list[ClaimRecord] = Field(default_factory=list, max_length=100)
+    decision_uses: list[DecisionUse] = Field(default_factory=list, max_length=100)
+    missing_data_items: list[MissingDataItem] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def validate_references(self) -> ReportMatrix:
+        registered_ids = source_ids_from_manifest(self.source_manifest)
+        if len(registered_ids) != len(self.source_manifest):
+            raise ValueError("source_manifest.source_id values must be unique")
+
+        evidence_ids: set[str] = set()
+        for item in self.evidence_items:
+            if item.evidence_id in evidence_ids:
+                raise ValueError(f"duplicate evidence_id in report matrix: {item.evidence_id}")
+            evidence_ids.add(item.evidence_id)
+            validate_source_ref_registered_and_consistent(
+                item.source_ref,
+                self.source_manifest,
+                "evidence_items",
+            )
+
+        claim_ids: set[str] = set()
+        for claim in self.claim_records:
+            if claim.claim_id in claim_ids:
+                raise ValueError(f"duplicate claim_id in report matrix: {claim.claim_id}")
+            claim_ids.add(claim.claim_id)
+            for evidence_id in claim.evidence_ids + claim.counter_evidence_ids:
+                if evidence_id not in evidence_ids:
+                    raise ValueError(f"unregistered evidence_id in claim_records: {evidence_id}")
+
+        for decision_use in self.decision_uses:
+            if decision_use.claim_id is not None and decision_use.claim_id not in claim_ids:
+                raise ValueError(f"unregistered claim_id in decision_uses: {decision_use.claim_id}")
+            for evidence_id in decision_use.decisive_evidence_ids:
+                if evidence_id not in evidence_ids:
+                    raise ValueError(f"unregistered evidence_id in decision_uses: {evidence_id}")
+
+        return self
 
 
 class StepStatus(WorkflowModel):
@@ -562,4 +894,89 @@ class ReviewResponse(WorkflowModel):
             raise ValueError("analysis_brief.ticker must match response ticker")
         if self.analysis_brief.fiscal_period != self.fiscal_period:
             raise ValueError("analysis_brief.fiscal_period must match response fiscal_period")
+        return self
+
+
+class WorkflowErrorDetail(WorkflowModel):
+    category: WorkflowErrorCategory
+    message: str = Field(min_length=1, max_length=1200)
+    field: str | None = Field(default=None, max_length=200)
+    retryable: bool = False
+
+
+class DryRunCheck(WorkflowModel):
+    name: str = Field(min_length=1, max_length=120)
+    status: DryRunStatus
+    message: str | None = Field(default=None, max_length=1000)
+    category: WorkflowErrorCategory | None = None
+
+
+class ReviewSuccessResponse(WorkflowModel):
+    status: Literal[ReviewStatus.SUCCEEDED] = ReviewStatus.SUCCEEDED
+    request_id: str | None = Field(default=None, max_length=80)
+    ticker: str = Field(min_length=1, max_length=15)
+    fiscal_period: str = Field(pattern=r"^\d{4}Q[1-4]$")
+    result: ReviewResponse
+
+    @field_validator("ticker", mode="before")
+    @classmethod
+    def normalize_ticker(cls, value: str) -> str:
+        normalized = str(value).upper().strip()
+        if not re.fullmatch(r"[A-Z0-9.\-]{1,15}", normalized):
+            raise ValueError("ticker must contain only letters, numbers, dots, or hyphens")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_result_identity(self) -> ReviewSuccessResponse:
+        if self.result.ticker != self.ticker:
+            raise ValueError("result.ticker must match response ticker")
+        if self.result.fiscal_period != self.fiscal_period:
+            raise ValueError("result.fiscal_period must match response fiscal_period")
+        return self
+
+
+class ReviewErrorResponse(WorkflowModel):
+    status: Literal[ReviewStatus.FAILED] = ReviewStatus.FAILED
+    request_id: str | None = Field(default=None, max_length=80)
+    ticker: str | None = Field(default=None, max_length=15)
+    fiscal_period: str | None = Field(default=None, pattern=r"^\d{4}Q[1-4]$")
+    errors: list[WorkflowErrorDetail] = Field(min_length=1, max_length=20)
+
+    @field_validator("ticker", mode="before")
+    @classmethod
+    def normalize_ticker(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = str(value).upper().strip()
+        if not re.fullmatch(r"[A-Z0-9.\-]{1,15}", normalized):
+            raise ValueError("ticker must contain only letters, numbers, dots, or hyphens")
+        return normalized
+
+
+class ReviewDryRunResponse(WorkflowModel):
+    status: Literal[ReviewStatus.DRY_RUN] = ReviewStatus.DRY_RUN
+    request_id: str = Field(min_length=1, max_length=80)
+    ticker: str = Field(min_length=1, max_length=15)
+    fiscal_period: str = Field(pattern=r"^\d{4}Q[1-4]$")
+    dry_run_status: DryRunStatus
+    checks: list[DryRunCheck] = Field(min_length=1, max_length=50)
+    errors: list[WorkflowErrorDetail] = Field(default_factory=list, max_length=20)
+
+    @field_validator("ticker", mode="before")
+    @classmethod
+    def normalize_ticker(cls, value: str) -> str:
+        normalized = str(value).upper().strip()
+        if not re.fullmatch(r"[A-Z0-9.\-]{1,15}", normalized):
+            raise ValueError("ticker must contain only letters, numbers, dots, or hyphens")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_status_consistency(self) -> ReviewDryRunResponse:
+        failed_checks = [check for check in self.checks if check.status == DryRunStatus.FAILED]
+        if self.dry_run_status == DryRunStatus.PASSED and self.errors:
+            raise ValueError("passed dry-run response cannot include errors")
+        if self.dry_run_status == DryRunStatus.PASSED and failed_checks:
+            raise ValueError("passed dry-run response cannot include failed checks")
+        if self.dry_run_status == DryRunStatus.FAILED and not (failed_checks or self.errors):
+            raise ValueError("failed dry-run response requires failed checks or errors")
         return self
