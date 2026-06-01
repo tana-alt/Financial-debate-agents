@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel
 
 from .llm import LLMProvider
 from .workflow_agents import BearAgent, BullAgent, JudgeAgent
 from .workflow_models import (
+    AgentRole,
     AnalysisBrief,
     DebateResult,
     EvidenceItem,
@@ -20,6 +22,13 @@ from .workflow_models import (
 )
 from .workflow_validation import WorkflowValidationError, WorkflowValidationGate
 
+AGENT_ROLE_BY_PUBLIC_ROLE: dict[str, AgentRole] = {
+    "EarningsQualityAnalyst": AgentRole.EARNINGS_QUALITY,
+    "CashFlowRiskAnalyst": AgentRole.CASH_FLOW_RISK,
+    "ManagementIntentAnalyst": AgentRole.MANAGEMENT_INTENT,
+    "GuidanceAnalyst": AgentRole.GUIDANCE,
+}
+
 
 class AgentRuntime:
     """Run independent specialist agents against a shared routed context."""
@@ -27,12 +36,36 @@ class AgentRuntime:
     def __init__(self, llm: LLMProvider):
         self.llm = llm
 
-    def run_parallel(self, agent_classes: tuple[type, ...], context: dict[str, Any]):
+    def run_parallel(
+        self,
+        agent_classes: tuple[type, ...],
+        context: dict[str, Any] | Mapping[AgentRole, dict[str, Any]],
+    ):
         with ThreadPoolExecutor(max_workers=len(agent_classes)) as executor:
             futures = [
-                executor.submit(agent_class(self.llm).run, context) for agent_class in agent_classes
+                executor.submit(agent_class(self.llm).run, self._context_for(agent_class, context))
+                for agent_class in agent_classes
             ]
             return [future.result() for future in futures]
+
+    def _context_for(
+        self,
+        agent_class: type,
+        context: dict[str, Any] | Mapping[AgentRole, dict[str, Any]],
+    ) -> dict[str, Any]:
+        if self._is_role_context_map(context):
+            public_role = str(getattr(getattr(agent_class, "spec", None), "public_role", ""))
+            role = AGENT_ROLE_BY_PUBLIC_ROLE.get(public_role)
+            if role is None:
+                raise KeyError(f"unsupported routed agent role: {public_role}")
+            return context[role]
+        return cast(dict[str, Any], context)
+
+    def _is_role_context_map(
+        self,
+        context: dict[str, Any] | Mapping[AgentRole, dict[str, Any]],
+    ) -> bool:
+        return bool(context) and all(isinstance(key, AgentRole) for key in context)
 
 
 class DebateRunner:

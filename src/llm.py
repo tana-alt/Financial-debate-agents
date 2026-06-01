@@ -324,14 +324,25 @@ class FakeProvider(LLMProvider):
             and isinstance(positive_pool[0], dict)
             and "source_ref" in positive_pool[0]
         ):
-            positive = positive_pool[0]["source_ref"]
-            negative = (
-                negative_pool[0]["source_ref"]
-                if negative_pool
-                and isinstance(negative_pool[0], dict)
-                and "source_ref" in negative_pool[0]
-                else positive
+            positive = (
+                self._source_ref_for_evidence(
+                    positive_pool,
+                    "EarningsQualityAnalyst:positive",
+                )
+                or positive_pool[0]["source_ref"]
             )
+            negative = self._source_ref_for_evidence(
+                negative_pool,
+                "CashFlowRiskAnalyst:negative",
+            )
+            if negative is None:
+                negative = (
+                    negative_pool[0]["source_ref"]
+                    if negative_pool
+                    and isinstance(negative_pool[0], dict)
+                    and "source_ref" in negative_pool[0]
+                    else positive
+                )
             return positive, negative
 
         source_refs = [
@@ -352,6 +363,23 @@ class FakeProvider(LLMProvider):
             source_refs[-1],
         )
         return positive, negative
+
+    def _source_ref_for_evidence(
+        self,
+        evidence_pool: Any,
+        evidence_id: str,
+    ) -> dict[str, Any] | None:
+        if not isinstance(evidence_pool, list):
+            return None
+        for item in evidence_pool:
+            if not isinstance(item, dict):
+                continue
+            if item.get("evidence_id") != evidence_id:
+                continue
+            source_ref = item.get("source_ref")
+            if isinstance(source_ref, dict):
+                return source_ref
+        return None
 
     def _collect_source_refs(self, value: Any) -> list[dict[str, Any]]:
         if isinstance(value, dict):

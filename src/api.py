@@ -162,6 +162,7 @@ def _legacy_review_request(request: NormalizedReviewRequest) -> ReviewRequest:
             *(section.source_ref for section in request.document_sections),
         ],
         source_manifest=request.source_manifest,
+        context_budget=request.context_budget,
         include_markdown=request.include_markdown,
         purpose=request.purpose,
         is_investment_advice=request.is_investment_advice,

@@ -40,6 +40,8 @@ def test_reviews_api_fake_smoke_returns_markdown_report(monkeypatch):
         "filing:risk",
     }
     assert body["markdown_report"]
+    assert body["markdown_report"].count("api:eps") == 1
+    assert body["markdown_report"].count("api:free_cash_flow") == 1
     for section in (
         "## Judge Rationale",
         "## Evidence Matrix",

@@ -448,6 +448,7 @@ class ReviewRequest(WorkflowModel):
     document_sections: list[DocumentSection] = Field(default_factory=list, max_length=200)
     source_refs: list[SourceRef] = Field(default_factory=list, max_length=100)
     source_manifest: list[SourceManifestEntry] = Field(default_factory=list, max_length=200)
+    context_budget: ContextBudget | None = None
     include_markdown: bool = True
     purpose: Literal["earnings_review_not_investment_advice"] = (
         "earnings_review_not_investment_advice"

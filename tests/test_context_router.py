@@ -144,6 +144,20 @@ def test_router_limits_each_role_to_allowed_context_keys_and_registered_sources(
     assert "source_index" not in routed.by_role[AgentRole.JUDGE].context
 
 
+def test_router_uses_registered_fallback_sources_when_required_role_would_be_starved():
+    request = normalized_request()
+    request.financial_metrics = request.financial_metrics.model_copy(update={"source_refs": []})
+    request.document_sections = [
+        section("eps", "EPS and earnings quality", "Only EPS source text was provided.")
+    ]
+    request.source_manifest = [manifest_entry("filing:eps", "eps")]
+
+    routed = ContextRouter().route(request)
+
+    assert routed_source_ids(routed.by_role[AgentRole.CASH_FLOW_RISK]) == ["filing:eps"]
+    assert routed_source_ids(routed.by_role[AgentRole.GUIDANCE]) == ["filing:eps"]
+
+
 def test_router_rejects_routed_source_id_removed_from_manifest_after_validation():
     request = normalized_request()
     request.source_manifest[:] = [

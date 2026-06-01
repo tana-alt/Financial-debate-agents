@@ -10,9 +10,11 @@ evidence aggregation -> debate agents -> judge -> Markdown renderer.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
+from .context_router import ContextRouter
 from .llm import LLMProvider
 from .report_quality_guidance import validate_guidance_required
 from .report_quality_missing_data import apply_confidence_caps
@@ -25,6 +27,7 @@ from .workflow_agents import (
     ManagementIntentAnalyst,
 )
 from .workflow_models import (
+    AgentRole,
     AnalysisBrief,
     ClaimRecord,
     ClaimType,
@@ -37,6 +40,7 @@ from .workflow_models import (
     JudgeDecision,
     JudgeTreatment,
     MissingDataItem,
+    NormalizedReviewRequest,
     ReportMatrix,
     ReviewRequest,
     ReviewResponse,
@@ -154,9 +158,10 @@ class MarkdownRenderer:
         request: ReviewRequest,
         evidence_items: list[EvidenceItem],
     ) -> list[SourceManifestEntry]:
+        if request.source_manifest:
+            return list(request.source_manifest)
+
         by_id: dict[str, SourceManifestEntry] = {}
-        for source in request.source_manifest:
-            by_id.setdefault(source.source_id, source)
         for item in evidence_items:
             ref = item.source_ref
             by_id.setdefault(
@@ -467,7 +472,11 @@ class ReviewWorkflow:
         request: ReviewRequest,
         metrics: FinancialMetrics,
         sections: list[DocumentSection],
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | Mapping[AgentRole, dict[str, Any]]:
+        routed_contexts = self._build_routed_agent_contexts(request, metrics, sections)
+        if routed_contexts is not None:
+            return routed_contexts
+
         run_spec = {
             "ticker": request.ticker,
             "fiscal_period": request.fiscal_period,
@@ -525,6 +534,42 @@ class ReviewWorkflow:
             "guidance_assumptions_sections": by_topic["guidance"] + by_topic["risk"],
             "prior_guidance_track_record": [],
             "management_intent_handoff": None,
+        }
+
+    def _build_routed_agent_contexts(
+        self,
+        request: ReviewRequest,
+        metrics: FinancialMetrics,
+        sections: list[DocumentSection],
+    ) -> Mapping[AgentRole, dict[str, Any]] | None:
+        if not request.source_manifest or request.context_budget is None:
+            return None
+
+        normalized_request = NormalizedReviewRequest(
+            schema_version="runtime-review-request.v1",
+            request_id=request.request_id or f"{request.ticker}:{request.fiscal_period}:runtime",
+            ticker=request.ticker,
+            fiscal_period=request.fiscal_period,
+            financial_metrics=metrics,
+            document_sections=sections,
+            source_manifest=request.source_manifest,
+            context_budget=request.context_budget,
+            include_markdown=request.include_markdown,
+            purpose=request.purpose,
+            is_investment_advice=request.is_investment_advice,
+            dry_run=False,
+        )
+        routed = ContextRouter().route(normalized_request)
+        return {
+            role: role_context.context
+            for role, role_context in routed.by_role.items()
+            if role
+            in {
+                AgentRole.EARNINGS_QUALITY,
+                AgentRole.CASH_FLOW_RISK,
+                AgentRole.MANAGEMENT_INTENT,
+                AgentRole.GUIDANCE,
+            }
         }
 
     def _sections_by_topic(

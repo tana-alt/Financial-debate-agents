@@ -1,4 +1,7 @@
+import pytest
+
 from src.report_renderer import ReportRenderer
+from src.workflow import MarkdownRenderer
 from src.workflow_models import (
     AgentRole,
     AnalysisBrief,
@@ -259,6 +262,27 @@ def test_source_appendix_does_not_duplicate_unrelated_sections():
     assert "Evidence Matrix" not in source_appendix
     assert "Quality Gates" not in source_appendix
     assert "Bull vs Bear Tension" not in source_appendix
+
+
+def test_workflow_matrix_uses_request_source_manifest_as_authoritative_registry():
+    request, brief, debate, decision, _matrix = renderer_inputs()
+    request.source_manifest = [
+        SourceManifestEntry(
+            source_id="api:eps:2025Q3",
+            source_type=SourceType.FINANCIAL_API,
+            title="Financial API EPS",
+            metric_name="eps",
+            reported_period="2025Q3",
+        )
+    ]
+
+    with pytest.raises(ValueError, match="unregistered source_id in evidence_items"):
+        MarkdownRenderer().build_report_matrix(
+            request=request,
+            brief=brief,
+            debate=debate,
+            decision=decision,
+        )
 
 
 def test_quality_gates_and_disclaimer_are_visible():

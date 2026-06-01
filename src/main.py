@@ -167,6 +167,7 @@ def _review_request_from_normalized(request: NormalizedReviewRequest) -> ReviewR
             "financial_metrics": request.financial_metrics,
             "document_sections": request.document_sections,
             "source_manifest": request.source_manifest,
+            "context_budget": request.context_budget,
             "include_markdown": request.include_markdown,
             "purpose": request.purpose,
             "is_investment_advice": request.is_investment_advice,

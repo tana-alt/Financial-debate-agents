@@ -349,6 +349,8 @@ class ContextRouter:
         }
 
         source_ids = self._dedupe_in_manifest_order(routed_source_ids, source_manifest)
+        if not source_ids and "source_index" in allowed_keys:
+            source_ids = [source.source_id for source in source_manifest]
         if source_ids and "source_index" in allowed_keys:
             context["source_index"] = self._source_index(source_ids, source_manifest)
 

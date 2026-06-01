@@ -26,6 +26,7 @@ from .workflow_models import (
     JudgeDecision,
     ManagementIntentFinding,
     ReviewRequest,
+    SourceManifestEntry,
     SourceRef,
     StepState,
     StepStatus,
@@ -90,7 +91,7 @@ class WorkflowValidationGate:
         financial_findings: list[BaseModel],
         presentation_findings: list[BaseModel],
     ) -> AnalysisBrief:
-        canonical_sources = self.canonical_source_refs(metrics, sections)
+        canonical_sources = self.canonical_source_refs(metrics, sections, request.source_manifest)
         allowed_source_ids = set(canonical_sources)
         (
             earnings_quality_finding,
@@ -452,7 +453,15 @@ class WorkflowValidationGate:
         self,
         metrics: FinancialMetrics,
         sections: list[DocumentSection],
+        source_manifest: list[SourceManifestEntry] | None = None,
     ) -> dict[SourceSignature, SourceRef]:
+        if source_manifest:
+            return {
+                self.source_signature(source): source
+                for source in [
+                    self.source_ref_from_manifest_entry(source) for source in source_manifest
+                ]
+            }
         return {
             self.source_signature(source): source
             for source in [
@@ -460,6 +469,21 @@ class WorkflowValidationGate:
                 *(section.source_ref for section in sections),
             ]
         }
+
+    def source_ref_from_manifest_entry(self, source: SourceManifestEntry) -> SourceRef:
+        return SourceRef(
+            source_id=source.source_id,
+            source_type=source.source_type,
+            url=source.url,
+            document_id=source.document_id,
+            section_id=source.section_id,
+            metric_name=source.metric_name,
+            page=source.page,
+            title=source.title,
+            line_range=source.line_range,
+            reported_period=source.reported_period,
+            as_of_date=source.as_of_date,
+        )
 
     def canonicalize_evidence_sources(
         self,
@@ -541,9 +565,9 @@ class WorkflowValidationGate:
         emitted: SourceSignature,
         canonical: SourceSignature,
     ) -> bool:
-        if emitted[:7] != canonical[:7]:
+        if emitted[:6] != canonical[:6]:
             return False
-        for emitted_value, canonical_value in zip(emitted[7:], canonical[7:], strict=True):
+        for emitted_value, canonical_value in zip(emitted[6:], canonical[6:], strict=True):
             if emitted_value is None or canonical_value is None:
                 continue
             if emitted_value != canonical_value:
