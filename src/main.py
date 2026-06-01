@@ -138,17 +138,17 @@ def _load_payload(
     if ticker is None or fiscal_period is None:
         raise click.UsageError("--ticker and --fiscal-period are required without --input-json")
 
-    payload: dict[str, Any] = {
+    cli_payload: dict[str, Any] = {
         "ticker": ticker,
         "fiscal_period": fiscal_period,
     }
     if filing_url:
-        payload["filing_url"] = filing_url
+        cli_payload["filing_url"] = filing_url
     if local_paths:
-        payload["local_path"] = [str(path) for path in local_paths]
+        cli_payload["local_path"] = [str(path) for path in local_paths]
     if raw_text:
-        payload["raw_text"] = raw_text
-    return _normalize_cli_payload(payload)
+        cli_payload["raw_text"] = raw_text
+    return _normalize_cli_payload(cli_payload)
 
 
 def _normalize_cli_payload(payload: dict[str, Any]) -> NormalizedReviewRequest:

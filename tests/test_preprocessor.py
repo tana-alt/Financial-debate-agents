@@ -4,8 +4,8 @@ import pandas as pd
 import pytest
 
 from src.preprocessor import (
-    build_normalized_review_request,
     build_financial_metrics,
+    build_normalized_review_request,
     calculate_surprise_pct,
     document_files_to_sections,
     safe_float,

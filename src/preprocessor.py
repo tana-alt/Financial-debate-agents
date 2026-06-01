@@ -28,8 +28,8 @@ from .workflow_models import (
     FinancialMetrics,
     NormalizedMetric,
     NormalizedReviewRequest,
-    SourceRef,
     SourceManifestEntry,
+    SourceRef,
     SourceType,
     UnmappedMetric,
 )
@@ -169,8 +169,7 @@ def _document_sections_from_local_payload(
     fiscal_period: str,
 ) -> list[DocumentSection]:
     sections = [
-        DocumentSection.model_validate(section)
-        for section in data.get("document_sections") or []
+        DocumentSection.model_validate(section) for section in data.get("document_sections") or []
     ]
 
     document_files = [

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel
 
 from scripts.validate_agent_assets import AGENT_ASSETS, validate_assets
 from src.llm import LLMProvider, LLMResponse
@@ -161,7 +162,7 @@ def test_runtime_prompt_schema_literals_match_workflow_models():
 )
 def test_runtime_prompt_agent_name_literals_match_workflow_models(
     public_role: str,
-    output_model: type,
+    output_model: type[BaseModel],
 ):
     expected_literal = output_model.model_fields["agent_name"].default
     system = build_system_prompt(public_role, "fallback scope")
