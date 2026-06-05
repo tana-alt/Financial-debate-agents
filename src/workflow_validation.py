@@ -31,6 +31,7 @@ from .workflow_models import (
     StepState,
     StepStatus,
     WorkflowStep,
+    source_refs_from_financial_metrics,
 )
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
@@ -49,6 +50,10 @@ SourceSignature = tuple[
     int | None,
     int | None,
     LineRangeSignature,
+    str | None,
+    date | None,
+    date | None,
+    str | None,
 ]
 
 
@@ -465,7 +470,7 @@ class WorkflowValidationGate:
         return {
             self.source_signature(source): source
             for source in [
-                *metrics.source_refs,
+                *source_refs_from_financial_metrics(metrics),
                 *(section.source_ref for section in sections),
             ]
         }
@@ -483,6 +488,10 @@ class WorkflowValidationGate:
             line_range=source.line_range,
             reported_period=source.reported_period,
             as_of_date=source.as_of_date,
+            provider=source.provider,
+            provider_row_date=source.provider_row_date,
+            provider_column_date=source.provider_column_date,
+            period_role=source.period_role,
         )
 
     def canonicalize_evidence_sources(
@@ -544,6 +553,10 @@ class WorkflowValidationGate:
             source.line_start,
             source.line_end,
             line_range,
+            source.provider,
+            source.provider_row_date,
+            source.provider_column_date,
+            source.period_role.value if source.period_role is not None else None,
         )
 
     def matching_source_signature(

@@ -24,6 +24,7 @@ from .workflow_models import (
     ReviewErrorResponse,
     ReviewSuccessResponse,
     WorkflowErrorDetail,
+    source_refs_from_financial_metrics,
 )
 from .workflow_validation import WorkflowValidationError
 
@@ -155,10 +156,14 @@ def _legacy_review_request(request: NormalizedReviewRequest) -> ReviewRequest:
         request_id=request.request_id,
         ticker=request.ticker,
         fiscal_period=request.fiscal_period,
+        target_earnings_date=request.target_earnings_date,
+        target_period_end_date=request.target_period_end_date,
+        prior_fiscal_period=request.prior_fiscal_period,
+        input_profile=request.input_profile,
         financial_metrics=request.financial_metrics,
         document_sections=request.document_sections,
         source_refs=[
-            *request.financial_metrics.source_refs,
+            *source_refs_from_financial_metrics(request.financial_metrics),
             *(section.source_ref for section in request.document_sections),
         ],
         source_manifest=request.source_manifest,

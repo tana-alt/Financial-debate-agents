@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Mapping, Sequence
+from datetime import date, datetime
 from math import isfinite
 from pathlib import Path
 from typing import Any
@@ -22,16 +23,23 @@ from pydantic import ValidationError
 
 from .metric_normalizer import resolve_canonical_metric
 from .workflow_models import (
+    AvailabilityItem,
+    AvailabilityStatus,
     ContextBudget,
+    DerivedMetricValue,
     DocumentFile,
     DocumentSection,
     FinancialMetrics,
+    InputProfile,
+    MetricPeriodRole,
+    MetricValue,
     NormalizedMetric,
     NormalizedReviewRequest,
     SourceManifestEntry,
     SourceRef,
     SourceType,
     UnmappedMetric,
+    source_refs_from_financial_metrics,
 )
 
 log = structlog.get_logger()
@@ -108,13 +116,20 @@ def build_normalized_review_request(
 
     ticker = _required_text(data, "ticker").upper()
     fiscal_period = _required_text(data, "fiscal_period", alias="quarter")
+    target_earnings_date = _optional_date(data.get("target_earnings_date"))
+    target_period_end_date = _optional_date(data.get("target_period_end_date"))
+    prior_fiscal_period = data.get("prior_fiscal_period")
+    input_profile = InputProfile(
+        data.get("input_profile") or InputProfile.YFINANCE_SEC_PRESENTATION_TAGGED
+    )
     sections = _document_sections_from_local_payload(
         data,
         ticker=ticker,
         fiscal_period=fiscal_period,
     )
 
-    if not sections and data.get("filing_url") is not None:
+    should_fetch_sec = bool(data.get("use_sec", True)) and data.get("filing_url") is not None
+    if should_fetch_sec:
         filing_url = str(data["filing_url"])
         sections.extend(segment_filing(fetch_filing_html(filing_url), url=filing_url))
 
@@ -123,7 +138,15 @@ def build_normalized_review_request(
             "document_sections, document_files, raw_text, local_path, or filing_url is required"
         )
 
-    metrics = _financial_metrics_from_payload(data, ticker=ticker, fiscal_period=fiscal_period)
+    metrics = _financial_metrics_from_payload(
+        data,
+        ticker=ticker,
+        fiscal_period=fiscal_period,
+        target_earnings_date=target_earnings_date,
+        target_period_end_date=target_period_end_date,
+        prior_fiscal_period=str(prior_fiscal_period) if prior_fiscal_period else None,
+        input_profile=input_profile,
+    )
     source_manifest = _source_manifest_from_refs(metrics, sections)
     context_budget = ContextBudget.model_validate(
         data.get("context_budget") or DEFAULT_CONTEXT_BUDGET
@@ -134,6 +157,10 @@ def build_normalized_review_request(
         request_id=str(data.get("request_id") or _slug(f"{ticker}:{fiscal_period}")),
         ticker=ticker,
         fiscal_period=fiscal_period,
+        target_earnings_date=target_earnings_date,
+        target_period_end_date=target_period_end_date,
+        prior_fiscal_period=str(prior_fiscal_period) if prior_fiscal_period else None,
+        input_profile=input_profile,
         financial_metrics=metrics,
         document_sections=sections,
         source_manifest=source_manifest,
@@ -162,6 +189,16 @@ def _required_text(data: Mapping[str, Any], key: str, *, alias: str | None = Non
     return str(value).strip()
 
 
+def _optional_date(value: Any) -> date | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value))
+
+
 def _document_sections_from_local_payload(
     data: Mapping[str, Any],
     *,
@@ -171,12 +208,14 @@ def _document_sections_from_local_payload(
     sections = [
         DocumentSection.model_validate(section) for section in data.get("document_sections") or []
     ]
+    _validate_target_period_sections(sections, fiscal_period=fiscal_period)
 
     document_files = [
         DocumentFile.model_validate(document_file)
         for document_file in data.get("document_files") or []
     ]
     document_files.extend(_local_path_document_files(data.get("local_path")))
+    _validate_target_period_document_files(document_files, fiscal_period=fiscal_period)
     if document_files:
         sections.extend(document_files_to_sections(document_files))
 
@@ -190,6 +229,34 @@ def _document_sections_from_local_payload(
         )
 
     return sections
+
+
+def _validate_target_period_sections(
+    sections: list[DocumentSection],
+    *,
+    fiscal_period: str,
+) -> None:
+    for section in sections:
+        reported_period = section.source_ref.reported_period
+        if reported_period is not None and reported_period != fiscal_period:
+            raise ValueError(
+                "document_sections must be target-period only: "
+                f"{section.section_id} reported_period {reported_period} != {fiscal_period}"
+            )
+
+
+def _validate_target_period_document_files(
+    document_files: list[DocumentFile],
+    *,
+    fiscal_period: str,
+) -> None:
+    for document_file in document_files:
+        if document_file.fiscal_period is not None and document_file.fiscal_period != fiscal_period:
+            raise ValueError(
+                "document_files must be target-period only: "
+                f"{document_file.document_id} fiscal_period {document_file.fiscal_period} "
+                f"!= {fiscal_period}"
+            )
 
 
 def _local_path_document_files(value: Any) -> list[DocumentFile]:
@@ -256,10 +323,32 @@ def _financial_metrics_from_payload(
     *,
     ticker: str,
     fiscal_period: str,
+    target_earnings_date: date | None = None,
+    target_period_end_date: date | None = None,
+    prior_fiscal_period: str | None = None,
+    input_profile: InputProfile = InputProfile.YFINANCE_SEC_PRESENTATION_TAGGED,
 ) -> FinancialMetrics:
     if data.get("financial_metrics") is None:
-        return fetch_consensus(ticker, fiscal_period)
-    return FinancialMetrics.model_validate(data["financial_metrics"])
+        return fetch_consensus(
+            ticker,
+            fiscal_period,
+            target_earnings_date=target_earnings_date,
+            target_period_end_date=target_period_end_date,
+            prior_fiscal_period=prior_fiscal_period,
+            input_profile=input_profile,
+        )
+
+    metrics = FinancialMetrics.model_validate(data["financial_metrics"])
+    updates: dict[str, Any] = {}
+    if target_earnings_date is not None and metrics.target_earnings_date is None:
+        updates["target_earnings_date"] = target_earnings_date
+    if target_period_end_date is not None and metrics.target_period_end_date is None:
+        updates["target_period_end_date"] = target_period_end_date
+    if prior_fiscal_period is not None and metrics.prior_fiscal_period is None:
+        updates["prior_fiscal_period"] = prior_fiscal_period
+    if metrics.input_profile != input_profile:
+        updates["input_profile"] = input_profile
+    return metrics.model_copy(update=updates) if updates else metrics
 
 
 def _source_manifest_from_refs(
@@ -267,7 +356,10 @@ def _source_manifest_from_refs(
     sections: list[DocumentSection],
 ) -> list[SourceManifestEntry]:
     manifest_by_id: dict[str, SourceManifestEntry] = {}
-    for source_ref in [*metrics.source_refs, *(section.source_ref for section in sections)]:
+    for source_ref in [
+        *source_refs_from_financial_metrics(metrics),
+        *(section.source_ref for section in sections),
+    ]:
         entry = _source_manifest_entry_from_ref(source_ref)
         existing = manifest_by_id.get(entry.source_id)
         if existing is not None:
@@ -298,6 +390,10 @@ def _source_manifest_entry_from_ref(source_ref: SourceRef) -> SourceManifestEntr
         line_range=source_ref.line_range,
         reported_period=source_ref.reported_period,
         as_of_date=source_ref.as_of_date,
+        provider=source_ref.provider,
+        provider_row_date=source_ref.provider_row_date,
+        provider_column_date=source_ref.provider_column_date,
+        period_role=source_ref.period_role,
     )
 
 
@@ -439,22 +535,120 @@ def calculate_surprise_pct(actual: float | None, consensus: float | None) -> flo
     return ((actual - consensus) / abs(consensus)) * 100
 
 
-def _first_metric_value(frame: Any, canonical_key: str) -> float | None:
-    if frame is None or getattr(frame, "empty", True):
+def _provider_date(value: Any) -> date | None:
+    if value is None:
         return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if hasattr(value, "date"):
+        try:
+            return value.date()
+        except (TypeError, ValueError):
+            return None
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except (TypeError, ValueError):
+        return None
+
+
+def _target_earnings_row(frame: Any, target_earnings_date: date | None) -> tuple[Any, date | None]:
+    if frame is None or getattr(frame, "empty", True) or target_earnings_date is None:
+        return None, None
+    if not hasattr(frame, "iterrows"):
+        return None, None
+
+    date_columns = ("Earnings Date", "EarningsDate", "earnings_date")
+    for index, row in frame.iterrows():
+        candidate = _provider_date(index)
+        if candidate is None:
+            for column in date_columns:
+                if hasattr(row, "get") and column in row:
+                    candidate = _provider_date(row.get(column))
+                    break
+        if candidate == target_earnings_date:
+            return row, candidate
+    return None, None
+
+
+def _target_metric_value(
+    frame: Any,
+    canonical_key: str,
+    target_period_end_date: date | None,
+) -> tuple[float | None, date | None]:
+    if frame is None or getattr(frame, "empty", True):
+        return None, None
+    if target_period_end_date is None:
+        return None, None
+
+    target_column = None
+    target_column_date = None
+    for column in getattr(frame, "columns", []):
+        column_date = _provider_date(column)
+        if column_date == target_period_end_date:
+            target_column = column
+            target_column_date = column_date
+            break
+    if target_column is None:
+        return None, None
+
     for raw_key in frame.index:
         if resolve_canonical_metric("yfinance", raw_key) == canonical_key:
             row = frame.loc[raw_key]
-            if hasattr(row, "iloc"):
-                return safe_float(row.iloc[0])
-            return safe_float(row)
-    return None
+            if hasattr(row, "get"):
+                return safe_float(row.get(target_column)), target_column_date
+            return safe_float(row), target_column_date
+    return None, None
+
+
+def _availability(
+    key: str,
+    status: AvailabilityStatus,
+    reason: str,
+    *,
+    source_type: SourceType = SourceType.FINANCIAL_API,
+    blocks_verdict: bool = False,
+) -> AvailabilityItem:
+    return AvailabilityItem(
+        key=key,
+        status=status,
+        reason=reason,
+        source_type=source_type,
+        blocks_verdict=blocks_verdict,
+    )
+
+
+def _financial_source_ref(
+    *,
+    ticker: str,
+    fiscal_period: str,
+    metric_name: str,
+    provider_row_date: date | None = None,
+    provider_column_date: date | None = None,
+    period_role: MetricPeriodRole = MetricPeriodRole.ACTUAL,
+) -> SourceRef:
+    return SourceRef(
+        source_id=f"financial_api:{ticker.upper()}:{fiscal_period}:{metric_name}",
+        source_type=SourceType.FINANCIAL_API,
+        metric_name=metric_name,
+        title="yfinance verified-period metric",
+        reported_period=fiscal_period,
+        provider="yfinance",
+        provider_row_date=provider_row_date,
+        provider_column_date=provider_column_date,
+        period_role=period_role,
+    )
 
 
 def build_financial_metrics(
     *,
     ticker: str,
     fiscal_period: str,
+    target_earnings_date: date | None = None,
+    target_period_end_date: date | None = None,
+    prior_fiscal_period: str | None = None,
+    input_profile: InputProfile = InputProfile.YFINANCE_SEC_PRESENTATION_TAGGED,
     eps: float | None = None,
     eps_consensus: float | None = None,
     eps_surprise_pct: float | None = None,
@@ -466,20 +660,58 @@ def build_financial_metrics(
     free_cash_flow: float | None = None,
     capex: float | None = None,
     guidance: str | None = None,
+    source_refs: list[SourceRef] | None = None,
+    availability: list[AvailabilityItem] | None = None,
     segment_metrics: list[NormalizedMetric] | None = None,
     unmapped_metrics: list[UnmappedMetric] | None = None,
 ) -> FinancialMetrics:
     """Build normalized financial metrics passed to workflow agents."""
+    source_refs = source_refs
+    if source_refs is None:
+        source_refs = [
+            SourceRef(
+                source_id=f"financial_api:{ticker.upper()}:{fiscal_period}",
+                source_type=SourceType.FINANCIAL_API,
+                metric_name="consensus_snapshot",
+                title="Financial API consensus snapshot",
+                reported_period=fiscal_period,
+            )
+        ]
+
     if eps_surprise_pct is None:
         eps_surprise_pct = calculate_surprise_pct(eps, eps_consensus)
     if revenue_surprise_pct is None:
         revenue_surprise_pct = calculate_surprise_pct(revenue, revenue_consensus)
     if operating_cash_flow is not None and capex is not None:
         free_cash_flow = operating_cash_flow - abs(capex)
+    canonical_metrics = _canonical_metric_values(
+        ticker=ticker,
+        fiscal_period=fiscal_period,
+        values={
+            "eps": eps,
+            "revenue": revenue,
+            "operating_cash_flow": operating_cash_flow,
+            "capex": capex,
+            "free_cash_flow": free_cash_flow,
+            "operating_margin_pct": operating_margin_pct,
+        },
+        source_refs=source_refs,
+    )
+    derived_metrics = _derived_metric_values(
+        ticker=ticker,
+        fiscal_period=fiscal_period,
+        free_cash_flow=free_cash_flow,
+        source_refs=source_refs,
+    )
 
     return FinancialMetrics(
         ticker=ticker,
         fiscal_period=fiscal_period,
+        target_earnings_date=target_earnings_date,
+        target_period_end_date=target_period_end_date,
+        prior_fiscal_period=prior_fiscal_period,
+        period_end_date=target_period_end_date,
+        input_profile=input_profile,
         eps=eps,
         eps_consensus=eps_consensus,
         eps_surprise_pct=eps_surprise_pct,
@@ -491,17 +723,92 @@ def build_financial_metrics(
         free_cash_flow=free_cash_flow,
         capex=capex,
         guidance=guidance,
+        canonical_metrics=canonical_metrics,
+        derived_metrics=derived_metrics,
+        availability=availability or [],
         segment_metrics=segment_metrics or [],
         unmapped_metrics=unmapped_metrics or [],
-        source_refs=[
-            SourceRef(
-                source_id=f"financial_api:{ticker.upper()}:{fiscal_period}",
-                source_type=SourceType.FINANCIAL_API,
-                metric_name="consensus_snapshot",
-                title="Financial API consensus snapshot",
-            )
-        ],
+        source_refs=source_refs,
     )
+
+
+def _canonical_metric_values(
+    *,
+    ticker: str,
+    fiscal_period: str,
+    values: Mapping[str, float | None],
+    source_refs: list[SourceRef],
+) -> list[MetricValue]:
+    metrics: list[MetricValue] = []
+    refs_by_metric = {ref.metric_name: ref for ref in source_refs if ref.metric_name}
+    units = {
+        "eps": "USD/share",
+        "revenue": "USD",
+        "operating_cash_flow": "USD",
+        "capex": "USD",
+        "free_cash_flow": "USD",
+        "operating_margin_pct": "pct",
+    }
+    for metric_name, value in values.items():
+        source_ref = refs_by_metric.get(metric_name)
+        if value is None or source_ref is None:
+            continue
+        metrics.append(
+            MetricValue(
+                metric_id=_metric_id(ticker, fiscal_period, metric_name),
+                metric_name=metric_name,
+                value=float(value),
+                unit=units.get(metric_name),
+                fiscal_period=fiscal_period,
+                period_role=MetricPeriodRole.ACTUAL,
+                source_ref=source_ref,
+            )
+        )
+    return metrics
+
+
+def _derived_metric_values(
+    *,
+    ticker: str,
+    fiscal_period: str,
+    free_cash_flow: float | None,
+    source_refs: list[SourceRef],
+) -> list[DerivedMetricValue]:
+    refs_by_metric = {ref.metric_name: ref for ref in source_refs if ref.metric_name}
+    operating_ref = refs_by_metric.get("operating_cash_flow")
+    capex_ref = refs_by_metric.get("capex")
+    if free_cash_flow is None or operating_ref is None or capex_ref is None:
+        return []
+
+    derived_ref = SourceRef(
+        source_id=_metric_id(ticker, fiscal_period, "free_cash_flow:derived"),
+        source_type=SourceType.DERIVED_METRIC,
+        metric_name="free_cash_flow",
+        title="Derived free cash flow",
+        reported_period=fiscal_period,
+        period_role=MetricPeriodRole.ACTUAL,
+    )
+    return [
+        DerivedMetricValue(
+            metric_id=_metric_id(ticker, fiscal_period, "free_cash_flow"),
+            metric_name="free_cash_flow",
+            value=float(free_cash_flow),
+            unit="USD",
+            fiscal_period=fiscal_period,
+            period_role=MetricPeriodRole.ACTUAL,
+            source_ref=derived_ref,
+            component_metric_ids=[
+                _metric_id(ticker, fiscal_period, "operating_cash_flow"),
+                _metric_id(ticker, fiscal_period, "capex"),
+            ],
+            component_source_refs=[operating_ref, capex_ref],
+        )
+    ]
+
+
+def _metric_id(ticker: str, fiscal_period: str, metric_name: str) -> str:
+    safe_metric = _slug(metric_name)
+    return f"metric:{ticker.upper()}:{fiscal_period}:{safe_metric}"
 
 
 def fetch_filing_html(url: str) -> str:
@@ -579,12 +886,21 @@ def segment_filing(html: str, url: str | None = None) -> list[DocumentSection]:
     return result
 
 
-def fetch_consensus(ticker: str, fiscal_period: str) -> FinancialMetrics:
+def fetch_consensus(
+    ticker: str,
+    fiscal_period: str,
+    *,
+    target_earnings_date: date | None = None,
+    target_period_end_date: date | None = None,
+    prior_fiscal_period: str | None = None,
+    input_profile: InputProfile = InputProfile.YFINANCE_SEC_PRESENTATION_TAGGED,
+) -> FinancialMetrics:
     """Pull actual & consensus EPS and revenue from yfinance.
 
     NOTE: yfinance scrapes Yahoo Finance and the schema occasionally
     changes. This function is intentionally defensive — it fills what
-    it can and leaves the rest as None for downstream agents to handle.
+    it can for verified target dates and leaves the rest as None for
+    downstream agents to handle.
     """
     t = yf.Ticker(ticker)
 
@@ -595,35 +911,167 @@ def fetch_consensus(ticker: str, fiscal_period: str) -> FinancialMetrics:
     operating_cash_flow = None
     capex = None
     free_cash_flow = None
+    source_refs: list[SourceRef] = []
+    availability: list[AvailabilityItem] = []
     try:
         earnings_dates = t.earnings_dates
-        if earnings_dates is not None and not earnings_dates.empty:
-            row = earnings_dates.iloc[0]  # most recent
+        row, provider_row_date = _target_earnings_row(earnings_dates, target_earnings_date)
+        if row is not None:
             eps_actual = safe_float(row.get("Reported EPS"))
             eps_consensus = safe_float(row.get("EPS Estimate"))
             eps_surprise_pct = safe_float(row.get("Surprise(%)"))
+            if eps_actual is not None:
+                source_refs.append(
+                    _financial_source_ref(
+                        ticker=ticker,
+                        fiscal_period=fiscal_period,
+                        metric_name="eps",
+                        provider_row_date=provider_row_date,
+                    )
+                )
+            if eps_consensus is not None:
+                source_refs.append(
+                    _financial_source_ref(
+                        ticker=ticker,
+                        fiscal_period=fiscal_period,
+                        metric_name="eps_consensus",
+                        provider_row_date=provider_row_date,
+                        period_role=MetricPeriodRole.CONSENSUS,
+                    )
+                )
+        elif target_earnings_date is None:
+            availability.append(
+                _availability(
+                    "yfinance:eps",
+                    AvailabilityStatus.PERIOD_UNVERIFIED,
+                    "target_earnings_date was not supplied; yfinance EPS row was not promoted.",
+                )
+            )
+        else:
+            availability.append(
+                _availability(
+                    "yfinance:eps",
+                    AvailabilityStatus.PERIOD_UNVERIFIED,
+                    "No yfinance EPS row matched target_earnings_date.",
+                )
+            )
     except Exception as e:
         log.warning("yfinance.eps_fetch_failed", error=str(e))
+        availability.append(
+            _availability(
+                "yfinance:eps",
+                AvailabilityStatus.UNAVAILABLE,
+                f"yfinance EPS fetch failed: {e}",
+            )
+        )
 
     try:
         quarterly_financials = t.quarterly_financials
-        if quarterly_financials is not None and not quarterly_financials.empty:
-            revenue_actual = _first_metric_value(quarterly_financials, "revenue")
+        revenue_actual, revenue_column_date = _target_metric_value(
+            quarterly_financials,
+            "revenue",
+            target_period_end_date,
+        )
+        if revenue_actual is not None:
+            source_refs.append(
+                _financial_source_ref(
+                    ticker=ticker,
+                    fiscal_period=fiscal_period,
+                    metric_name="revenue",
+                    provider_column_date=revenue_column_date,
+                )
+            )
+        elif target_period_end_date is None:
+            availability.append(
+                _availability(
+                    "yfinance:revenue",
+                    AvailabilityStatus.PERIOD_UNVERIFIED,
+                    "target_period_end_date was not supplied; yfinance financial column was not promoted.",
+                )
+            )
+        else:
+            availability.append(
+                _availability(
+                    "yfinance:revenue",
+                    AvailabilityStatus.OPTIONAL_MISSING,
+                    "No verified yfinance revenue value matched target_period_end_date.",
+                )
+            )
     except Exception as e:
         log.warning("yfinance.revenue_fetch_failed", error=str(e))
+        availability.append(
+            _availability(
+                "yfinance:revenue",
+                AvailabilityStatus.UNAVAILABLE,
+                f"yfinance revenue fetch failed: {e}",
+            )
+        )
 
     try:
         quarterly_cashflow = t.quarterly_cashflow
-        if quarterly_cashflow is not None and not quarterly_cashflow.empty:
-            operating_cash_flow = _first_metric_value(quarterly_cashflow, "operating_cash_flow")
-            capex = _first_metric_value(quarterly_cashflow, "capex")
-            free_cash_flow = _first_metric_value(quarterly_cashflow, "free_cash_flow")
+        operating_cash_flow, operating_cash_flow_date = _target_metric_value(
+            quarterly_cashflow,
+            "operating_cash_flow",
+            target_period_end_date,
+        )
+        capex, capex_date = _target_metric_value(
+            quarterly_cashflow,
+            "capex",
+            target_period_end_date,
+        )
+        free_cash_flow, free_cash_flow_date = _target_metric_value(
+            quarterly_cashflow,
+            "free_cash_flow",
+            target_period_end_date,
+        )
+        cashflow_values = {
+            "operating_cash_flow": (operating_cash_flow, operating_cash_flow_date),
+            "capex": (capex, capex_date),
+            "free_cash_flow": (free_cash_flow, free_cash_flow_date),
+        }
+        for metric_name, (value, provider_column_date) in cashflow_values.items():
+            if value is not None:
+                source_refs.append(
+                    _financial_source_ref(
+                        ticker=ticker,
+                        fiscal_period=fiscal_period,
+                        metric_name=metric_name,
+                        provider_column_date=provider_column_date,
+                    )
+                )
+        if target_period_end_date is None:
+            availability.append(
+                _availability(
+                    "yfinance:cash_flow",
+                    AvailabilityStatus.PERIOD_UNVERIFIED,
+                    "target_period_end_date was not supplied; yfinance cash-flow column was not promoted.",
+                )
+            )
+        elif operating_cash_flow is None and capex is None and free_cash_flow is None:
+            availability.append(
+                _availability(
+                    "yfinance:cash_flow",
+                    AvailabilityStatus.OPTIONAL_MISSING,
+                    "No verified yfinance cash-flow values matched target_period_end_date.",
+                )
+            )
     except Exception as e:
         log.warning("yfinance.cashflow_fetch_failed", error=str(e))
+        availability.append(
+            _availability(
+                "yfinance:cash_flow",
+                AvailabilityStatus.UNAVAILABLE,
+                f"yfinance cash-flow fetch failed: {e}",
+            )
+        )
 
     return build_financial_metrics(
         ticker=ticker,
         fiscal_period=fiscal_period,
+        target_earnings_date=target_earnings_date,
+        target_period_end_date=target_period_end_date,
+        prior_fiscal_period=prior_fiscal_period,
+        input_profile=input_profile,
         eps=eps_actual,
         eps_consensus=eps_consensus,
         eps_surprise_pct=eps_surprise_pct,
@@ -631,4 +1079,6 @@ def fetch_consensus(ticker: str, fiscal_period: str) -> FinancialMetrics:
         operating_cash_flow=operating_cash_flow,
         capex=capex,
         free_cash_flow=free_cash_flow,
+        source_refs=source_refs,
+        availability=availability,
     )

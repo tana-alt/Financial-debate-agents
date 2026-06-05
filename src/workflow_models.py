@@ -54,6 +54,65 @@ class SourceType(str, Enum):
     MANUAL_UPLOAD = "manual_upload"
 
 
+class InputProfile(str, Enum):
+    YFINANCE_ONLY = "yfinance_only"
+    YFINANCE_SEC = "yfinance_sec"
+    YFINANCE_PRESENTATION_TAGGED = "yfinance_presentation_tagged"
+    YFINANCE_SEC_PRESENTATION_TAGGED = "yfinance_sec_presentation_tagged"
+
+
+class AvailabilityStatus(str, Enum):
+    AVAILABLE = "available"
+    COMPUTED = "computed"
+    OPTIONAL_MISSING = "optional_missing"
+    REQUIRED_MISSING = "required_missing"
+    UNAVAILABLE = "unavailable"
+    PERIOD_UNVERIFIED = "period_unverified"
+    REJECTED = "rejected"
+    CONFLICTING = "conflicting"
+    AMBIGUOUS = "ambiguous"
+    NOT_IN_CONTRACT = "not_in_contract"
+    OUT_OF_SCOPE_SOURCE_POLICY = "out_of_scope_source_policy"
+
+
+class MetricPeriodRole(str, Enum):
+    ACTUAL = "actual"
+    CONSENSUS = "consensus"
+    GUIDANCE = "guidance"
+    PRIOR_PERIOD = "prior_period"
+    FUTURE_GUIDANCE = "future_guidance"
+    TARGET_PERIOD_DOCUMENT = "target_period_document"
+    AUDIT_ONLY = "audit_only"
+
+
+class PresentationTag(str, Enum):
+    ACTUALS = "actuals"
+    PNL = "pnl"
+    CASH_FLOW = "cash_flow"
+    BALANCE_SHEET = "balance_sheet"
+    SEGMENT = "segment"
+    GUIDANCE = "guidance"
+    OUTLOOK = "outlook"
+    ASSUMPTIONS = "assumptions"
+    MANAGEMENT = "management"
+    STRATEGY = "strategy"
+    DEMAND = "demand"
+    SUPPLY = "supply"
+    CAPITAL_ALLOCATION = "capital_allocation"
+    RISK = "risk"
+    GAAP_NON_GAAP_RECONCILIATION = "gaap_non_gaap_reconciliation"
+    ONE_TIME_ITEMS = "one_time_items"
+
+
+class PresentationMetricCandidateStatus(str, Enum):
+    CANDIDATE = "candidate"
+    CANONICAL = "canonical"
+    CONFLICTING_WITH_CANONICAL = "conflicting_with_canonical"
+    AMBIGUOUS_PERIOD = "ambiguous_period"
+    AMBIGUOUS_UNIT = "ambiguous_unit"
+    OUT_OF_SCOPE = "out_of_scope"
+
+
 class EvidencePolarity(str, Enum):
     POSITIVE = "positive"
     NEGATIVE = "negative"
@@ -219,6 +278,10 @@ def validate_source_ref_registered_and_consistent(
         "line_range",
         "reported_period",
         "as_of_date",
+        "provider",
+        "provider_row_date",
+        "provider_column_date",
+        "period_role",
     )
     for field_name in fields_to_compare:
         source_value = getattr(source_ref, field_name)
@@ -280,6 +343,10 @@ class SourceRef(WorkflowModel):
     metric_name: str | None = Field(default=None, max_length=120)
     reported_period: str | None = Field(default=None, max_length=40)
     as_of_date: date | None = None
+    provider: str | None = Field(default=None, max_length=80)
+    provider_row_date: date | None = None
+    provider_column_date: date | None = None
+    period_role: MetricPeriodRole | None = None
 
     @model_validator(mode="after")
     def validate_locator(self) -> SourceRef:
@@ -321,6 +388,10 @@ class SourceManifestEntry(WorkflowModel):
     line_range: LineRange | None = None
     reported_period: str | None = Field(default=None, max_length=40)
     as_of_date: date | None = None
+    provider: str | None = Field(default=None, max_length=80)
+    provider_row_date: date | None = None
+    provider_column_date: date | None = None
+    period_role: MetricPeriodRole | None = None
 
     @model_validator(mode="after")
     def validate_locator(self) -> SourceManifestEntry:
@@ -362,6 +433,119 @@ class DocumentFile(WorkflowModel):
     source_type: SourceType = SourceType.MANUAL_UPLOAD
     document_id: str = Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9_.:-]+$")
     title: str = Field(min_length=1, max_length=300)
+    fiscal_period: str | None = Field(default=None, pattern=r"^\d{4}Q[1-4]$")
+    period_role: MetricPeriodRole | None = None
+
+
+class AvailabilityItem(WorkflowModel):
+    key: str = Field(min_length=1, max_length=160)
+    status: AvailabilityStatus
+    reason: str = Field(min_length=1, max_length=1200)
+    source_type: SourceType | None = None
+    blocks_verdict: bool = False
+
+
+class MetricValue(WorkflowModel):
+    metric_id: str = Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9_.:-]+$")
+    metric_name: str = Field(min_length=1, max_length=120)
+    value: float
+    unit: str | None = Field(default=None, max_length=40)
+    fiscal_period: str = Field(pattern=r"^\d{4}Q[1-4]$")
+    period_role: MetricPeriodRole
+    source_ref: SourceRef
+
+
+class DerivedMetricValue(MetricValue):
+    component_metric_ids: list[str] = Field(min_length=1, max_length=20)
+    component_source_refs: list[SourceRef] = Field(min_length=1, max_length=20)
+
+
+class GuidanceMetric(MetricValue):
+    low_value: float | None = None
+    high_value: float | None = None
+    assumptions: list[NonEmptyText] = Field(default_factory=list, max_length=12)
+
+    @model_validator(mode="after")
+    def validate_range_order(self) -> GuidanceMetric:
+        if self.low_value is not None and self.high_value is not None:
+            if self.high_value < self.low_value:
+                raise ValueError("guidance high_value must be greater than or equal to low_value")
+        return self
+
+
+class GuidanceDelta(WorkflowModel):
+    metric_name: str = Field(min_length=1, max_length=120)
+    fiscal_period: str = Field(pattern=r"^\d{4}Q[1-4]$")
+    company_guidance: GuidanceMetric
+    consensus_estimate: MetricValue
+    delta_value: float
+    delta_pct: float | None = None
+
+    @model_validator(mode="after")
+    def validate_matching_metric_and_period(self) -> GuidanceDelta:
+        if self.company_guidance.metric_name != self.consensus_estimate.metric_name:
+            raise ValueError("guidance delta requires matching metric names")
+        if self.company_guidance.fiscal_period != self.consensus_estimate.fiscal_period:
+            raise ValueError("guidance delta requires matching fiscal periods")
+        if self.metric_name != self.company_guidance.metric_name:
+            raise ValueError("guidance delta metric_name must match company guidance")
+        if self.fiscal_period != self.company_guidance.fiscal_period:
+            raise ValueError("guidance delta fiscal_period must match company guidance")
+        return self
+
+
+class TaggedPresentationSection(WorkflowModel):
+    section: DocumentSection
+    tags: list[PresentationTag] = Field(default_factory=list, max_length=20)
+
+
+class PresentationMetricCandidate(WorkflowModel):
+    candidate_id: str = Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9_.:-]+$")
+    metric_name: str = Field(min_length=1, max_length=120)
+    raw_text: str = Field(min_length=1, max_length=500)
+    value: float | None = None
+    unit: str | None = Field(default=None, max_length=40)
+    fiscal_period: str | None = Field(default=None, pattern=r"^\d{4}Q[1-4]$")
+    period_role: MetricPeriodRole | None = None
+    status: PresentationMetricCandidateStatus = PresentationMetricCandidateStatus.CANDIDATE
+    source_ref: SourceRef
+
+
+class MetricConflict(WorkflowModel):
+    conflict_id: str = Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9_.:-]+$")
+    ticker: str = Field(min_length=1, max_length=15)
+    fiscal_period: str = Field(pattern=r"^\d{4}Q[1-4]$")
+    metric_name: str = Field(min_length=1, max_length=120)
+    period_role: MetricPeriodRole
+    canonical_metric_id: str | None = Field(default=None, max_length=120)
+    conflicting_metric_ids: list[str] = Field(min_length=1, max_length=20)
+    reason: str = Field(min_length=1, max_length=1200)
+
+
+class EarningsQualityInputs(WorkflowModel):
+    metrics: list[MetricValue] = Field(default_factory=list, max_length=100)
+    presentation_sections: list[TaggedPresentationSection] = Field(default_factory=list)
+    sec_sections: list[DocumentSection] = Field(default_factory=list)
+    availability: list[AvailabilityItem] = Field(default_factory=list)
+
+
+class CashFlowRiskInputs(EarningsQualityInputs):
+    derived_metrics: list[DerivedMetricValue] = Field(default_factory=list, max_length=50)
+
+
+class ManagementIntentInputs(WorkflowModel):
+    presentation_sections: list[TaggedPresentationSection] = Field(default_factory=list)
+    sec_sections: list[DocumentSection] = Field(default_factory=list)
+    availability: list[AvailabilityItem] = Field(default_factory=list)
+
+
+class GuidanceInputs(WorkflowModel):
+    company_guidance: list[GuidanceMetric] = Field(default_factory=list, max_length=50)
+    consensus_estimates: list[MetricValue] = Field(default_factory=list, max_length=50)
+    guidance_deltas: list[GuidanceDelta] = Field(default_factory=list, max_length=50)
+    presentation_sections: list[TaggedPresentationSection] = Field(default_factory=list)
+    sec_sections: list[DocumentSection] = Field(default_factory=list)
+    availability: list[AvailabilityItem] = Field(default_factory=list)
 
 
 class RawMetricBase(WorkflowModel):
@@ -395,8 +579,12 @@ class UnmappedMetric(RawMetricBase):
 class FinancialMetrics(WorkflowModel):
     ticker: str = Field(min_length=1, max_length=15)
     fiscal_period: str = Field(pattern=r"^\d{4}Q[1-4]$")
+    target_earnings_date: date | None = None
+    target_period_end_date: date | None = None
+    prior_fiscal_period: str | None = Field(default=None, pattern=r"^\d{4}Q[1-4]$")
     period_end_date: date | None = None
     currency: str = Field(default="USD", min_length=3, max_length=3)
+    input_profile: InputProfile = InputProfile.YFINANCE_SEC_PRESENTATION_TAGGED
 
     revenue: float | None = None
     revenue_consensus: float | None = None
@@ -412,7 +600,17 @@ class FinancialMetrics(WorkflowModel):
     capex: float | None = None
 
     guidance: str | None = Field(default=None, max_length=2000)
-    source_refs: list[SourceRef] = Field(default_factory=list, max_length=20)
+    source_refs: list[SourceRef] = Field(default_factory=list, max_length=100)
+    canonical_metrics: list[MetricValue] = Field(default_factory=list, max_length=200)
+    derived_metrics: list[DerivedMetricValue] = Field(default_factory=list, max_length=100)
+    guidance_metrics: list[GuidanceMetric] = Field(default_factory=list, max_length=100)
+    guidance_deltas: list[GuidanceDelta] = Field(default_factory=list, max_length=100)
+    metric_conflicts: list[MetricConflict] = Field(default_factory=list, max_length=100)
+    presentation_metric_candidates: list[PresentationMetricCandidate] = Field(
+        default_factory=list,
+        max_length=200,
+    )
+    availability: list[AvailabilityItem] = Field(default_factory=list, max_length=200)
     segment_metrics: list[NormalizedMetric] = Field(default_factory=list, max_length=500)
     unmapped_metrics: list[UnmappedMetric] = Field(default_factory=list, max_length=500)
 
@@ -432,6 +630,127 @@ class FinancialMetrics(WorkflowModel):
             raise ValueError("currency must be a 3-letter ISO code")
         return normalized
 
+    @model_validator(mode="after")
+    def reconcile_presentation_candidates(self) -> FinancialMetrics:
+        if not self.presentation_metric_candidates:
+            return self
+
+        canonical_values = {
+            "eps": self.eps,
+            "revenue": self.revenue,
+            "operating_cash_flow": self.operating_cash_flow,
+            "capex": self.capex,
+            "free_cash_flow": self.free_cash_flow,
+            "operating_margin_pct": self.operating_margin_pct,
+        }
+        existing_conflicts = list(self.metric_conflicts)
+        updated_candidates: list[PresentationMetricCandidate] = []
+        for candidate in self.presentation_metric_candidates:
+            canonical_value = canonical_values.get(candidate.metric_name)
+            if canonical_value is None or candidate.value is None:
+                updated_candidates.append(candidate)
+                continue
+            if candidate.fiscal_period is None:
+                updated_candidates.append(
+                    candidate.model_copy(
+                        update={"status": PresentationMetricCandidateStatus.AMBIGUOUS_PERIOD}
+                    )
+                )
+                continue
+            if candidate.fiscal_period != self.fiscal_period:
+                updated_candidates.append(candidate)
+                continue
+            if candidate.period_role not in {None, MetricPeriodRole.ACTUAL}:
+                updated_candidates.append(candidate)
+                continue
+
+            threshold = self._conflict_threshold(candidate.metric_name)
+            denominator = max(abs(float(canonical_value)), 1.0)
+            difference_ratio = abs(float(candidate.value) - float(canonical_value)) / denominator
+            if difference_ratio > threshold:
+                updated_candidates.append(
+                    candidate.model_copy(
+                        update={
+                            "status": (PresentationMetricCandidateStatus.CONFLICTING_WITH_CANONICAL)
+                        }
+                    )
+                )
+                existing_conflicts.append(
+                    MetricConflict(
+                        conflict_id=self._safe_metric_id(
+                            f"conflict:{self.ticker}:{self.fiscal_period}:{candidate.metric_name}:{candidate.candidate_id}"
+                        ),
+                        ticker=self.ticker,
+                        fiscal_period=self.fiscal_period,
+                        metric_name=candidate.metric_name,
+                        period_role=MetricPeriodRole.ACTUAL,
+                        canonical_metric_id=self._canonical_metric_id(candidate.metric_name),
+                        conflicting_metric_ids=[candidate.candidate_id],
+                        reason=(
+                            f"Presentation candidate {candidate.value:g} conflicts with "
+                            f"canonical {candidate.metric_name} {float(canonical_value):g}."
+                        ),
+                    )
+                )
+            else:
+                updated_candidates.append(candidate)
+
+        object.__setattr__(self, "presentation_metric_candidates", updated_candidates)
+        object.__setattr__(self, "metric_conflicts", existing_conflicts)
+        return self
+
+    @staticmethod
+    def _conflict_threshold(metric_name: str) -> float:
+        if metric_name == "eps":
+            return 0.02
+        if metric_name in {"revenue"}:
+            return 0.02
+        if metric_name in {"free_cash_flow", "operating_cash_flow", "capex"}:
+            return 0.05
+        if metric_name in {"operating_margin_pct"}:
+            return 0.01
+        return 0.05
+
+    def _canonical_metric_id(self, metric_name: str) -> str:
+        for metric in self.canonical_metrics:
+            if metric.metric_name == metric_name and metric.period_role == MetricPeriodRole.ACTUAL:
+                return metric.metric_id
+        return self._safe_metric_id(f"metric:{self.ticker}:{self.fiscal_period}:{metric_name}")
+
+    @staticmethod
+    def _safe_metric_id(value: str) -> str:
+        normalized = re.sub(r"[^A-Za-z0-9_.:-]+", "-", value).strip("-")
+        return (normalized or "metric")[:120]
+
+
+def source_refs_from_financial_metrics(metrics: FinancialMetrics) -> list[SourceRef]:
+    """Return every metric-level source ref that may be emitted as evidence."""
+    refs: list[SourceRef] = []
+    seen: set[str] = set()
+
+    def append(source_ref: SourceRef) -> None:
+        if source_ref.source_id in seen:
+            return
+        seen.add(source_ref.source_id)
+        refs.append(source_ref)
+
+    for source_ref in metrics.source_refs:
+        append(source_ref)
+    for metric in metrics.canonical_metrics:
+        append(metric.source_ref)
+    for metric in metrics.derived_metrics:
+        append(metric.source_ref)
+        for component_ref in metric.component_source_refs:
+            append(component_ref)
+    for metric in metrics.guidance_metrics:
+        append(metric.source_ref)
+    for delta in metrics.guidance_deltas:
+        append(delta.company_guidance.source_ref)
+        append(delta.consensus_estimate.source_ref)
+    for candidate in metrics.presentation_metric_candidates:
+        append(candidate.source_ref)
+    return refs
+
 
 class ReviewRequest(WorkflowModel):
     request_id: str | None = Field(default=None, max_length=80)
@@ -440,6 +759,11 @@ class ReviewRequest(WorkflowModel):
         validation_alias=AliasChoices("fiscal_period", "quarter"),
         pattern=r"^\d{4}Q[1-4]$",
     )
+    target_earnings_date: date | None = None
+    target_period_end_date: date | None = None
+    prior_fiscal_period: str | None = Field(default=None, pattern=r"^\d{4}Q[1-4]$")
+    input_profile: InputProfile = InputProfile.YFINANCE_SEC_PRESENTATION_TAGGED
+    use_sec: bool = True
     filing_url: AnyUrl | None = None
     presentation_url: AnyUrl | None = None
     transcript_url: AnyUrl | None = None
@@ -493,8 +817,17 @@ class NormalizedReviewRequest(WorkflowModel):
     request_id: str = Field(min_length=1, max_length=80)
     ticker: str = Field(min_length=1, max_length=15)
     fiscal_period: str = Field(pattern=r"^\d{4}Q[1-4]$")
+    target_earnings_date: date | None = None
+    target_period_end_date: date | None = None
+    prior_fiscal_period: str | None = Field(default=None, pattern=r"^\d{4}Q[1-4]$")
+    input_profile: InputProfile = InputProfile.YFINANCE_SEC_PRESENTATION_TAGGED
     financial_metrics: FinancialMetrics
     document_sections: list[DocumentSection] = Field(default_factory=list, max_length=200)
+    tagged_presentation_sections: list[TaggedPresentationSection] = Field(
+        default_factory=list,
+        max_length=200,
+    )
+    availability: list[AvailabilityItem] = Field(default_factory=list, max_length=200)
     source_manifest: list[SourceManifestEntry] = Field(min_length=1, max_length=200)
     context_budget: ContextBudget
     include_markdown: bool
@@ -539,7 +872,7 @@ class NormalizedReviewRequest(WorkflowModel):
                 "document_sections",
             )
 
-        for source_ref in self.financial_metrics.source_refs:
+        for source_ref in source_refs_from_financial_metrics(self.financial_metrics):
             validate_source_ref_registered_and_consistent(
                 source_ref,
                 self.source_manifest,
@@ -605,6 +938,7 @@ class MissingDataItem(WorkflowModel):
     reason: str = Field(min_length=1, max_length=1200)
     materiality: Literal["low", "medium", "high"]
     requested_source_type: SourceType | None = None
+    status: AvailabilityStatus = AvailabilityStatus.REQUIRED_MISSING
     blocks_verdict: bool = False
 
 
@@ -616,6 +950,7 @@ class ReportMatrix(WorkflowModel):
     claim_records: list[ClaimRecord] = Field(default_factory=list, max_length=100)
     decision_uses: list[DecisionUse] = Field(default_factory=list, max_length=100)
     missing_data_items: list[MissingDataItem] = Field(default_factory=list, max_length=50)
+    data_quality_flags: list[AvailabilityItem] = Field(default_factory=list, max_length=200)
 
     @model_validator(mode="after")
     def validate_references(self) -> ReportMatrix:

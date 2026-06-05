@@ -7,6 +7,7 @@ from typing import Any
 
 from .workflow_models import (
     AnalysisBrief,
+    AvailabilityStatus,
     ClaimRecord,
     DebateResult,
     DecisionUse,
@@ -15,6 +16,7 @@ from .workflow_models import (
     ReportMatrix,
     ReviewRequest,
     SourceManifestEntry,
+    SourceType,
 )
 
 REPORT_SECTION_ORDER = (
@@ -22,6 +24,7 @@ REPORT_SECTION_ORDER = (
     "Bull vs Bear Tension",
     "Evidence Matrix",
     "Agent Contribution",
+    "Data Quality Flags",
     "Uncertainty And Missing Data",
     "Quality Gates",
     "Source Appendix",
@@ -32,6 +35,34 @@ DISCLAIMER_TEXT = (
     "This report is an earnings analysis artifact and is not investment advice. "
     "It does not provide stock-price forecasts or instructions to transact."
 )
+
+UNSUPPORTED_MISSING_SOURCE_TYPES = {
+    SourceType.EARNINGS_CALL.value,
+    SourceType.PRESS_RELEASE.value,
+}
+
+UNSUPPORTED_MISSING_PHRASES = (
+    "analyst report",
+    "news",
+    "not in contract",
+    "not_in_contract",
+    "out of contract",
+    "out-of-contract",
+    "out_of_contract",
+    "out of scope source policy",
+    "out_of_scope_source_policy",
+    "press release",
+    "transcript",
+    "unsupported",
+    "web search",
+)
+
+PRESENTATION_COVERAGE_KEYWORDS = {
+    "guidance": ("guidance", "outlook", "forecast", "guide"),
+    "management": ("management", "strategy", "demand", "supply", "capital allocation"),
+    "cash_flow": ("cash flow", "free cash flow", "operating cash flow", "fcf", "capex"),
+    "risk": ("risk", "risks", "headwind", "uncertainty", "pressure"),
+}
 
 
 class ReportRenderer:
@@ -52,6 +83,7 @@ class ReportRenderer:
             self._section("Bull vs Bear Tension", self._bull_bear_lines(debate)),
             self._section("Evidence Matrix", self._evidence_matrix_lines(matrix)),
             self._section("Agent Contribution", self._agent_contribution_lines(brief)),
+            self._section("Data Quality Flags", self._data_quality_flag_lines(request, matrix)),
             self._section(
                 "Uncertainty And Missing Data",
                 self._uncertainty_lines(brief, debate, matrix),
@@ -172,6 +204,27 @@ class ReportRenderer:
             )
         return lines
 
+    def _data_quality_flag_lines(
+        self,
+        request: ReviewRequest,
+        matrix: ReportMatrix,
+    ) -> list[str]:
+        return [
+            f"- Input profile: {request.input_profile.value}",
+            f"- Period verification: {self._period_verification(request, matrix)}",
+            f"- Metric conflicts: {self._metric_conflict_status(matrix)}",
+            f"- Guidance delta status: {self._guidance_delta_status(matrix)}",
+            f"- Presentation tag coverage: {self._presentation_tag_coverage(matrix)}",
+            *[
+                "- {key}: {status} - {reason}".format(
+                    key=self._cell(item.key),
+                    status=self._cell(self._enum_value(item.status)),
+                    reason=self._cell(item.reason),
+                )
+                for item in matrix.data_quality_flags
+            ],
+        ]
+
     def _uncertainty_lines(
         self,
         brief: AnalysisBrief,
@@ -179,14 +232,15 @@ class ReportRenderer:
         matrix: ReportMatrix,
     ) -> list[str]:
         lines: list[str] = []
-        if matrix.missing_data_items:
+        missing_data_items = self._reportable_missing_data_items(matrix)
+        if missing_data_items:
             lines.extend(
                 [
                     "| Topic | Materiality | Blocks verdict | Reason |",
                     "|---|---|---:|---|",
                 ]
             )
-            for item in matrix.missing_data_items:
+            for item in missing_data_items:
                 lines.append(
                     "| {topic} | {materiality} | {blocks} | {reason} |".format(
                         topic=self._cell(item.topic),
@@ -202,6 +256,7 @@ class ReportRenderer:
             (finding.agent_name, missing)
             for finding in self._findings(brief)
             for missing in finding.missing_data
+            if self._is_reportable_missing_text(missing)
         ]
         if agent_missing:
             lines.extend(["", "### Agent Missing Data"])
@@ -223,7 +278,8 @@ class ReportRenderer:
             f"- Evidence items: {len(matrix.evidence_items)}",
             f"- Claim records: {len(matrix.claim_records)}",
             f"- Decision uses: {len(matrix.decision_uses)}",
-            f"- Missing data items: {len(matrix.missing_data_items)}",
+            f"- Missing data items: {len(self._reportable_missing_data_items(matrix))}",
+            f"- Data quality flags: {len(matrix.data_quality_flags)}",
             f"- Fact-check statuses: {self._counter_summary(fact_checks)}",
             f"- Judge treatments: {self._counter_summary(treatments)}",
             "- Source references: registered and internally consistent",
@@ -249,6 +305,162 @@ class ReportRenderer:
                 )
             )
         return lines
+
+    def _input_profile(self, matrix: ReportMatrix) -> str:
+        source_types = {
+            self._source_type_value(source.source_type) for source in matrix.source_manifest
+        }
+        has_yfinance = bool(
+            source_types & {SourceType.FINANCIAL_API.value, SourceType.DERIVED_METRIC.value}
+        )
+        has_sec = SourceType.FILING.value in source_types
+        has_presentation = SourceType.EARNINGS_PRESENTATION.value in source_types
+
+        if has_yfinance and has_sec and has_presentation:
+            return "yfinance_sec_presentation_tagged"
+        if has_yfinance and has_sec:
+            return "yfinance_sec"
+        if has_yfinance and has_presentation:
+            return "yfinance_presentation_tagged"
+        if has_yfinance:
+            return "yfinance_only"
+        return "normalized_sources_only"
+
+    def _period_verification(self, request: ReviewRequest, matrix: ReportMatrix) -> str:
+        if request.target_earnings_date is None and request.target_period_end_date is None:
+            return "unverified"
+
+        periods: list[str | None] = []
+        periods.extend(source.reported_period for source in matrix.source_manifest)
+        periods.extend(
+            item.reported_period or item.source_ref.reported_period
+            for item in matrix.evidence_items
+        )
+
+        known_periods = [period for period in periods if period]
+        if not known_periods:
+            return "unverified"
+
+        matching = [period for period in known_periods if period == request.fiscal_period]
+        if len(matching) == len(known_periods) and len(known_periods) == len(periods):
+            return "verified"
+        if matching:
+            return "partial"
+        return "unverified"
+
+    def _metric_conflict_status(self, matrix: ReportMatrix) -> str:
+        conflict_text = " ".join(
+            self._missing_item_text(item) for item in self._reportable_missing_data_items(matrix)
+        ).lower()
+        has_conflict_item = "conflict" in conflict_text or "contradict" in conflict_text
+        has_contradicted_evidence = any(
+            self._enum_value(item.fact_check_status) == "contradicted"
+            for item in matrix.evidence_items
+        )
+        return "listed" if has_conflict_item or has_contradicted_evidence else "none"
+
+    def _guidance_delta_status(self, matrix: ReportMatrix) -> str:
+        text = " ".join(
+            [
+                *(
+                    self._missing_item_text(item)
+                    for item in self._reportable_missing_data_items(matrix)
+                ),
+                *(
+                    f"{item.summary} {item.detail} {item.metric_name or ''}"
+                    for item in matrix.evidence_items
+                ),
+            ]
+        ).lower()
+        if "company guidance" in text and ("missing" in text or "unavailable" in text):
+            return "company_guidance_missing"
+        if "consensus" in text and ("missing" in text or "unavailable" in text):
+            return "consensus_missing"
+        if "guidance delta" in text or "guidance_consensus_delta" in text:
+            return "computed"
+        return "company_guidance_missing"
+
+    def _presentation_tag_coverage(self, matrix: ReportMatrix) -> str:
+        presentation_source_ids = {
+            source.source_id
+            for source in matrix.source_manifest
+            if self._source_type_value(source.source_type) == SourceType.EARNINGS_PRESENTATION.value
+        }
+        texts: list[str] = []
+        for source in matrix.source_manifest:
+            if source.source_id in presentation_source_ids:
+                texts.append(
+                    " ".join(
+                        value
+                        for value in (
+                            source.title,
+                            source.document_id,
+                            source.section_id,
+                            source.metric_name,
+                        )
+                        if value
+                    )
+                )
+        for item in matrix.evidence_items:
+            if item.source_ref.source_id in presentation_source_ids:
+                texts.append(
+                    " ".join(
+                        value
+                        for value in (
+                            item.summary,
+                            item.detail,
+                            item.metric_name,
+                            item.source_ref.title,
+                            item.source_ref.section_id,
+                        )
+                        if value
+                    )
+                )
+
+        combined = " ".join(texts).lower()
+        coverage = {
+            tag: any(keyword in combined for keyword in keywords)
+            for tag, keywords in PRESENTATION_COVERAGE_KEYWORDS.items()
+        }
+        return ", ".join(f"{tag}={'yes' if covered else 'no'}" for tag, covered in coverage.items())
+
+    def _reportable_missing_data_items(self, matrix: ReportMatrix) -> list[Any]:
+        return [
+            item for item in matrix.missing_data_items if self._is_reportable_missing_item(item)
+        ]
+
+    def _is_reportable_missing_item(self, item: Any) -> bool:
+        status = getattr(item, "status", None)
+        if status in {
+            AvailabilityStatus.NOT_IN_CONTRACT,
+            AvailabilityStatus.OUT_OF_SCOPE_SOURCE_POLICY,
+        }:
+            return False
+        requested = self._source_type_value(getattr(item, "requested_source_type", None))
+        if requested in UNSUPPORTED_MISSING_SOURCE_TYPES:
+            return False
+        return self._is_reportable_missing_text(self._missing_item_text(item))
+
+    def _is_reportable_missing_text(self, text: str) -> bool:
+        lowered = text.lower()
+        normalized = lowered.replace("_", " ").replace("-", " ")
+        return not any(
+            phrase in lowered or phrase in normalized for phrase in UNSUPPORTED_MISSING_PHRASES
+        )
+
+    def _missing_item_text(self, item: Any) -> str:
+        return " ".join(
+            str(value)
+            for value in (
+                getattr(item, "topic", ""),
+                getattr(item, "reason", ""),
+                getattr(item, "materiality", ""),
+            )
+            if value
+        )
+
+    def _source_type_value(self, source_type: object) -> str:
+        return str(getattr(source_type, "value", source_type))
 
     def _decision_indexes(
         self,

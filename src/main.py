@@ -22,7 +22,11 @@ from pydantic import ValidationError
 from .llm import get_provider
 from .preprocessor import build_normalized_review_request
 from .workflow import ReviewWorkflow
-from .workflow_models import NormalizedReviewRequest, ReviewRequest
+from .workflow_models import (
+    NormalizedReviewRequest,
+    ReviewRequest,
+    source_refs_from_financial_metrics,
+)
 
 
 def setup_logging() -> None:
@@ -164,8 +168,16 @@ def _review_request_from_normalized(request: NormalizedReviewRequest) -> ReviewR
             "request_id": request.request_id,
             "ticker": request.ticker,
             "fiscal_period": request.fiscal_period,
+            "target_earnings_date": request.target_earnings_date,
+            "target_period_end_date": request.target_period_end_date,
+            "prior_fiscal_period": request.prior_fiscal_period,
+            "input_profile": request.input_profile,
             "financial_metrics": request.financial_metrics,
             "document_sections": request.document_sections,
+            "source_refs": [
+                *source_refs_from_financial_metrics(request.financial_metrics),
+                *(section.source_ref for section in request.document_sections),
+            ],
             "source_manifest": request.source_manifest,
             "context_budget": request.context_budget,
             "include_markdown": request.include_markdown,

@@ -29,6 +29,8 @@ from .workflow_agents import (
 from .workflow_models import (
     AgentRole,
     AnalysisBrief,
+    AvailabilityItem,
+    AvailabilityStatus,
     ClaimRecord,
     ClaimType,
     DebateResult,
@@ -49,15 +51,16 @@ from .workflow_models import (
     StepStatus,
     VerdictLabel,
     WorkflowStep,
+    source_refs_from_financial_metrics,
 )
 from .workflow_runtime import AgentRuntime, DebateRunner, JudgeRunner
 from .workflow_validation import WorkflowValidationError, WorkflowValidationGate
 
 
-def _fetch_consensus(ticker: str, quarter: str):
+def _fetch_consensus(ticker: str, quarter: str, **kwargs):
     from .preprocessor import fetch_consensus
 
-    return fetch_consensus(ticker, quarter)
+    return fetch_consensus(ticker, quarter, **kwargs)
 
 
 def _fetch_filing_html(url: str) -> str:
@@ -122,6 +125,7 @@ class MarkdownRenderer:
             ),
             decision_uses=self._decision_uses(evidence_items, decision),
             missing_data_items=self._missing_data_items(brief),
+            data_quality_flags=self._data_quality_flags(request),
         )
 
     def _matrix_evidence_items(
@@ -178,6 +182,10 @@ class MarkdownRenderer:
                     line_range=ref.line_range,
                     reported_period=ref.reported_period,
                     as_of_date=ref.as_of_date,
+                    provider=ref.provider,
+                    provider_row_date=ref.provider_row_date,
+                    provider_column_date=ref.provider_column_date,
+                    period_role=ref.period_role,
                 ),
             )
         return list(by_id.values())
@@ -255,6 +263,37 @@ class MarkdownRenderer:
                         materiality="medium",
                     )
                 )
+        return items
+
+    def _data_quality_flags(self, request: ReviewRequest) -> list[AvailabilityItem]:
+        metrics = request.financial_metrics
+        profile = metrics.input_profile if metrics is not None else request.input_profile
+        items = [
+            AvailabilityItem(
+                key="input_profile",
+                status=AvailabilityStatus.AVAILABLE,
+                reason=f"Input profile: {profile.value}",
+            )
+        ]
+        if metrics is not None:
+            items.extend(metrics.availability)
+
+        period_verified = bool(request.target_earnings_date or request.target_period_end_date)
+        items.append(
+            AvailabilityItem(
+                key="period_verification",
+                status=(
+                    AvailabilityStatus.AVAILABLE
+                    if period_verified
+                    else AvailabilityStatus.PERIOD_UNVERIFIED
+                ),
+                reason=(
+                    "Period verification: verified"
+                    if period_verified
+                    else "Period verification: unverified"
+                ),
+            )
+        )
         return items
 
     def _claim_id(self, item: EvidenceItem) -> str:
@@ -426,10 +465,10 @@ class ReviewWorkflow:
         if request.document_files:
             sections.extend(_document_files_to_sections(request.document_files))
 
-        if not sections and request.filing_url is not None:
+        if request.use_sec and request.filing_url is not None:
             filing_url = str(request.filing_url)
             html = _fetch_filing_html(filing_url)
-            sections = _segment_filing(html, url=filing_url)
+            sections.extend(_segment_filing(html, url=filing_url))
 
         if not sections:
             raise WorkflowValidationError(
@@ -465,7 +504,14 @@ class ReviewWorkflow:
         return ((actual - consensus) / abs(consensus)) * 100
 
     def _fetch_financial_metrics(self, request: ReviewRequest) -> FinancialMetrics:
-        return _fetch_consensus(request.ticker, request.fiscal_period)
+        return _fetch_consensus(
+            request.ticker,
+            request.fiscal_period,
+            target_earnings_date=request.target_earnings_date,
+            target_period_end_date=request.target_period_end_date,
+            prior_fiscal_period=request.prior_fiscal_period,
+            input_profile=request.input_profile,
+        )
 
     def _build_agent_context(
         self,
@@ -483,7 +529,10 @@ class ReviewWorkflow:
             "purpose": request.purpose,
             "is_investment_advice": request.is_investment_advice,
         }
-        source_index = [section.source_ref for section in sections] + metrics.source_refs
+        source_index = [
+            *[section.source_ref for section in sections],
+            *source_refs_from_financial_metrics(metrics),
+        ]
         by_topic = self._sections_by_topic(sections)
         metrics_json = metrics.model_dump(mode="json", exclude_none=True)
         minimal_snapshot = {
@@ -516,22 +565,49 @@ class ReviewWorkflow:
             "earnings_quality_metrics": metrics_json,
             "cash_flow_risk_metrics": metrics_json,
             "cash_conversion_inputs": metrics_json,
-            "guidance_metrics": metrics_json,
-            "guidance_consensus_deltas": metrics_json,
-            "consensus_deltas": metrics_json,
+            "guidance_metrics": self._guidance_inputs(metrics_json, by_topic["guidance"]),
+            "guidance_consensus_deltas": [],
+            "consensus_deltas": [],
             "earnings_quality_sections": (
-                by_topic["eps"] + by_topic["revenue"] + by_topic["segments"] + by_topic["other"]
+                by_topic["actuals"]
+                + by_topic["pnl"]
+                + by_topic["eps"]
+                + by_topic["revenue"]
+                + by_topic["segments"]
+                + by_topic["gaap_non_gaap_reconciliation"]
+                + by_topic["one_time_items"]
+                + by_topic["other"]
             ),
-            "cash_flow_risk_sections": by_topic["other"] + by_topic["risk"] + by_topic["guidance"],
+            "cash_flow_risk_sections": (
+                by_topic["other"]
+                + by_topic["risk"]
+                + by_topic["cash_flow"]
+                + by_topic["balance_sheet"]
+                + by_topic["capital_allocation"]
+            ),
             "risk_sections": by_topic["risk"],
-            "management_sections": by_topic["guidance"] + by_topic["segments"],
-            "management_intent_sections": by_topic["guidance"]
+            "management_sections": (
+                by_topic["management"]
+                + by_topic["strategy"]
+                + by_topic["guidance"]
+                + by_topic["segments"]
+            ),
+            "management_intent_sections": by_topic["management"]
+            + by_topic["strategy"]
+            + by_topic["capital_allocation"]
+            + by_topic["guidance"]
             + by_topic["segments"]
             + by_topic["other"],
-            "strategy_sections": by_topic["segments"] + by_topic["other"],
+            "strategy_sections": (
+                by_topic["strategy"]
+                + by_topic["management"]
+                + by_topic["capital_allocation"]
+                + by_topic["segments"]
+                + by_topic["other"]
+            ),
             "mdna_sections": by_topic["other"],
             "guidance_sections": by_topic["guidance"],
-            "guidance_assumptions_sections": by_topic["guidance"] + by_topic["risk"],
+            "guidance_assumptions_sections": by_topic["guidance"],
             "prior_guidance_track_record": [],
             "management_intent_handoff": None,
         }
@@ -550,6 +626,10 @@ class ReviewWorkflow:
             request_id=request.request_id or f"{request.ticker}:{request.fiscal_period}:runtime",
             ticker=request.ticker,
             fiscal_period=request.fiscal_period,
+            target_earnings_date=request.target_earnings_date,
+            target_period_end_date=request.target_period_end_date,
+            prior_fiscal_period=request.prior_fiscal_period,
+            input_profile=request.input_profile,
             financial_metrics=metrics,
             document_sections=sections,
             source_manifest=request.source_manifest,
@@ -572,17 +652,47 @@ class ReviewWorkflow:
             }
         }
 
+    def _guidance_inputs(
+        self,
+        metrics_json: Mapping[str, Any],
+        guidance_sections: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        company_guidance = []
+        if metrics_json.get("guidance"):
+            company_guidance.append(
+                {
+                    "metric_name": "guidance_text",
+                    "text": metrics_json["guidance"],
+                    "reported_period": metrics_json.get("fiscal_period"),
+                }
+            )
+
+        consensus_estimates = []
+        for metric_name in ("revenue", "eps"):
+            consensus_key = f"{metric_name}_consensus"
+            if metrics_json.get(consensus_key) is not None:
+                consensus_estimates.append(
+                    {
+                        "metric_name": metric_name,
+                        "value": metrics_json[consensus_key],
+                        "reported_period": metrics_json.get("fiscal_period"),
+                    }
+                )
+
+        return {
+            "company_guidance": company_guidance,
+            "consensus_estimates": consensus_estimates,
+            "guidance_deltas": [],
+            "presentation_sections": guidance_sections,
+            "sec_sections": [],
+            "availability": metrics_json.get("availability", []),
+        }
+
     def _sections_by_topic(
         self,
         sections: list[DocumentSection],
     ) -> dict[str, list[dict[str, Any]]]:
-        grouped: dict[str, list[dict[str, Any]]] = {
-            name: [] for name in ("eps", "revenue", "guidance", "segments", "risk", "other")
-        }
-        for section in sections:
-            topic = self._infer_topic(section)
-            grouped[topic].append(section.model_dump(mode="json"))
-        return grouped
+        return ContextRouter()._sections_by_topic(sections)
 
     def _infer_topic(self, section: DocumentSection) -> str:
         label = f"{section.section_id} {section.heading}".lower()

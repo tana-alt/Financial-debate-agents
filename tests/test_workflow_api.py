@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from threading import Lock
 
 import pytest
@@ -9,10 +10,14 @@ from src import api
 from src.llm import LLMResponse
 from src.workflow import ReviewWorkflow, WorkflowValidationError
 from src.workflow_models import (
+    DocumentSection,
     EvidenceItem,
     EvidencePolarity,
+    FinancialMetrics,
     ImpactArea,
+    MetricPeriodRole,
     ReviewRequest,
+    SourceManifestEntry,
     SourceRef,
     SourceType,
 )
@@ -405,6 +410,109 @@ def test_review_workflow_runs_ordered_api_first_steps(monkeypatch):
     assert "filing:guidance" not in earnings_quality_prompt
 
 
+def test_workflow_fallback_guidance_deltas_are_not_full_metrics_aliases():
+    workflow = ReviewWorkflow(llm=FakeLLM())
+    request = ReviewRequest(ticker="NVDA", fiscal_period="2025Q3")
+    metrics = FinancialMetrics(
+        ticker="NVDA",
+        fiscal_period="2025Q3",
+        eps=0.81,
+        eps_consensus=0.75,
+        guidance="Management guided to durable demand.",
+    )
+    sections = [
+        DocumentSection(
+            section_id="page-5",
+            source_ref=SourceRef(
+                source_id="presentation:page-5",
+                source_type=SourceType.EARNINGS_PRESENTATION,
+                document_id="deck",
+                section_id="page-5",
+                page=5,
+            ),
+            heading="Page 5",
+            text="Management guidance and outlook assume durable demand.",
+        )
+    ]
+
+    context = workflow._build_agent_context(request, metrics, sections)
+
+    assert isinstance(context, dict)
+    assert context["guidance_consensus_deltas"] == []
+    assert context["consensus_deltas"] == []
+    assert context["guidance_metrics"]["company_guidance"]
+    assert "presentation:page-5" in str(context["guidance_sections"])
+
+
+def test_workflow_ingest_appends_sec_sections_when_presentation_exists(monkeypatch):
+    calls = {}
+    filing_url = "https://www.sec.gov/Archives/example/sample.htm"
+
+    def fake_fetch_filing_html(url):
+        calls["fetch_url"] = url
+        return "<html>mock filing</html>"
+
+    def fake_segment_filing(html, url=None):
+        calls["segment_html"] = html
+        calls["segment_url"] = url
+        return [
+            DocumentSection(
+                section_id="filing:risk",
+                source_ref=SourceRef(
+                    source_id="filing:risk",
+                    source_type=SourceType.FILING,
+                    document_id="filing-html",
+                    section_id="filing:risk",
+                    url=filing_url,
+                ),
+                heading="Risk",
+                text="Risk factors discuss demand uncertainty.",
+            )
+        ]
+
+    monkeypatch.setattr("src.workflow._fetch_filing_html", fake_fetch_filing_html)
+    monkeypatch.setattr("src.workflow._segment_filing", fake_segment_filing)
+
+    workflow = ReviewWorkflow(llm=FakeLLM())
+    metrics = FinancialMetrics(
+        ticker="NVDA",
+        fiscal_period="2025Q3",
+        eps=0.81,
+        eps_consensus=0.75,
+    )
+    request = ReviewRequest(
+        ticker="NVDA",
+        fiscal_period="2025Q3",
+        financial_metrics=metrics,
+        filing_url=filing_url,
+        document_sections=[
+            DocumentSection(
+                section_id="presentation:guidance",
+                source_ref=SourceRef(
+                    source_id="presentation:guidance",
+                    source_type=SourceType.EARNINGS_PRESENTATION,
+                    document_id="deck",
+                    section_id="presentation:guidance",
+                ),
+                heading="Page 5",
+                text="Management guidance assumes durable demand.",
+            )
+        ],
+    )
+
+    _metrics, sections = workflow._ingest(request)
+
+    assert calls == {
+        "fetch_url": filing_url,
+        "segment_html": "<html>mock filing</html>",
+        "segment_url": filing_url,
+    }
+    assert {section.source_ref.source_type for section in sections} == {
+        SourceType.EARNINGS_PRESENTATION,
+        SourceType.FILING,
+    }
+
+
 def test_workflow_rejects_bull_case_evidence_not_in_analysis_brief(monkeypatch):
     def fail_external_fetch(*args, **kwargs):
         raise AssertionError("fixture inputs should bypass external fetches")
@@ -513,6 +621,72 @@ def test_workflow_canonicalizes_valid_evidence_source_url():
     [updated] = validator.canonicalize_evidence_sources([emitted], canonical_sources)
 
     assert str(updated.source_ref.url) == "https://www.sec.gov/Archives/example/nvda.htm"
+
+
+def test_workflow_canonicalizes_source_manifest_metric_metadata():
+    validator = WorkflowValidationGate()
+    canonical = SourceManifestEntry(
+        source_id="financial_api:NVDA:2025Q3:eps",
+        source_type=SourceType.FINANCIAL_API,
+        metric_name="eps",
+        title="yfinance EPS",
+        reported_period="2025Q3",
+        provider="yfinance",
+        provider_row_date=date(2025, 8, 28),
+        period_role=MetricPeriodRole.ACTUAL,
+    )
+    emitted = EvidenceItem(
+        evidence_id="ev-source-metadata",
+        polarity=EvidencePolarity.POSITIVE,
+        summary="EPS beat consensus.",
+        detail="Reported EPS exceeded the consensus estimate.",
+        impact_areas=[ImpactArea.EPS],
+        source_ref=SourceRef(
+            source_id="financial_api:NVDA:2025Q3:eps",
+            source_type=SourceType.FINANCIAL_API,
+            metric_name="eps",
+            reported_period="2025Q3",
+        ),
+        confidence=0.7,
+    )
+
+    canonical_ref = validator.source_ref_from_manifest_entry(canonical)
+    canonical_sources = {validator.source_signature(canonical_ref): canonical_ref}
+    validator.validate_evidence_sources([emitted], set(canonical_sources))
+    [updated] = validator.canonicalize_evidence_sources([emitted], canonical_sources)
+
+    assert updated.source_ref.provider == "yfinance"
+    assert updated.source_ref.provider_row_date == date(2025, 8, 28)
+    assert updated.source_ref.period_role is MetricPeriodRole.ACTUAL
+
+
+def test_workflow_rejects_metric_source_with_mismatched_period_role():
+    validator = WorkflowValidationGate()
+    canonical = SourceRef(
+        source_id="financial_api:NVDA:2025Q3:eps",
+        source_type=SourceType.FINANCIAL_API,
+        metric_name="eps",
+        reported_period="2025Q3",
+        period_role=MetricPeriodRole.ACTUAL,
+    )
+    emitted = EvidenceItem(
+        evidence_id="ev-period-role-mismatch",
+        polarity=EvidencePolarity.POSITIVE,
+        summary="EPS beat consensus.",
+        detail="Reported EPS exceeded the consensus estimate.",
+        impact_areas=[ImpactArea.EPS],
+        source_ref=SourceRef(
+            source_id="financial_api:NVDA:2025Q3:eps",
+            source_type=SourceType.FINANCIAL_API,
+            metric_name="eps",
+            reported_period="2025Q3",
+            period_role=MetricPeriodRole.CONSENSUS,
+        ),
+        confidence=0.7,
+    )
+
+    with pytest.raises(WorkflowValidationError, match="mismatched locator"):
+        validator.validate_evidence_sources([emitted], {validator.source_signature(canonical)})
 
 
 def test_reviews_endpoint_delegates_to_workflow():

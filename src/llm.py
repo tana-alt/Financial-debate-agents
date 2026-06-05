@@ -345,11 +345,14 @@ class FakeProvider(LLMProvider):
                 )
             return positive, negative
 
+        all_source_refs = self._collect_source_refs(context)
         source_refs = [
             source_ref
-            for source_ref in self._collect_source_refs(context)
+            for source_ref in all_source_refs
             if source_ref.get("source_type") not in {"financial_api", "derived_metric"}
         ]
+        if not source_refs:
+            source_refs = all_source_refs
         if not source_refs:
             return fallback_positive, fallback_negative
         positive = source_refs[0]

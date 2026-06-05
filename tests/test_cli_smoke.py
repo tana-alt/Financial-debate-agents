@@ -73,13 +73,41 @@ def test_cli_fake_smoke_accepts_document_files(monkeypatch, tmp_path):
     assert "## Source Appendix" in report
 
 
+def test_cli_fake_smoke_accepts_current_local_presentation_sample(monkeypatch, tmp_path):
+    monkeypatch.setenv("LLM_PROVIDER", "fake")
+    monkeypatch.setattr("src.workflow._fetch_consensus", lambda *args, **kwargs: None)
+    monkeypatch.setattr("src.workflow._fetch_filing_html", lambda *args, **kwargs: "")
+
+    out_dir = tmp_path / "out"
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "run",
+            "--input-json",
+            "samples/request.current.local-presentation.example.json",
+            "--out",
+            str(out_dir),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    report = (out_dir / "report.md").read_text(encoding="utf-8")
+    workflow_result = json.loads((out_dir / "workflow_result.json").read_text(encoding="utf-8"))
+    assert workflow_result["ticker"] == "NVDA"
+    assert workflow_result["judge_decision"]["verdict"] in {"good", "neutral", "bad"}
+    assert "## Data Quality Flags" in report
+    assert "## Evidence Matrix" in report
+    assert "current-sample-presentation:section-1" in report
+
+
 def test_cli_api_mode_posts_normalized_payload_without_raw_acquisition(monkeypatch, tmp_path):
     filing_url = "https://www.sec.gov/Archives/example/sample.htm"
     captured = {}
 
     monkeypatch.setattr(
         "src.preprocessor.fetch_consensus",
-        lambda ticker, fiscal_period: build_financial_metrics(
+        lambda ticker, fiscal_period, **kwargs: build_financial_metrics(
             ticker=ticker,
             fiscal_period=fiscal_period,
             eps=0.81,

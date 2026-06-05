@@ -227,6 +227,7 @@ def test_renderer_outputs_final_section_order():
         "Bull vs Bear Tension",
         "Evidence Matrix",
         "Agent Contribution",
+        "Data Quality Flags",
         "Uncertainty And Missing Data",
         "Quality Gates",
         "Source Appendix",
@@ -236,6 +237,47 @@ def test_renderer_outputs_final_section_order():
     positions = [markdown.index(f"## {heading}") for heading in headings]
 
     assert positions == sorted(positions)
+
+
+def test_data_quality_flags_render_before_missing_data_and_filter_out_of_contract_gaps():
+    request, brief, debate, decision, matrix = renderer_inputs()
+    matrix.source_manifest.append(
+        SourceManifestEntry(
+            source_id="presentation:page-5",
+            source_type=SourceType.EARNINGS_PRESENTATION,
+            title="Q3 presentation guidance page",
+            document_id="deck-2025q3",
+            section_id="page-5",
+            page=5,
+            reported_period="2025Q3",
+        )
+    )
+    matrix.missing_data_items.append(
+        MissingDataItem(
+            missing_data_id="missing:transcript",
+            topic="Transcript",
+            reason="Transcript was not supplied.",
+            materiality="medium",
+            requested_source_type=SourceType.EARNINGS_CALL,
+        )
+    )
+
+    markdown = ReportRenderer().render(
+        request=request,
+        brief=brief,
+        debate=debate,
+        decision=decision,
+        matrix=matrix,
+    )
+
+    assert markdown.index("## Data Quality Flags") < markdown.index(
+        "## Uncertainty And Missing Data"
+    )
+    data_quality = section(markdown, "Data Quality Flags")
+    uncertainty = section(markdown, "Uncertainty And Missing Data")
+    assert "Input profile: yfinance_sec_presentation_tagged" in data_quality
+    assert "Transcript was not supplied" not in uncertainty
+    assert "Transcript" not in uncertainty
 
 
 def test_evidence_matrix_distinguishes_contract_fields():

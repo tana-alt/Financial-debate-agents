@@ -21,7 +21,9 @@ from src.workflow_models import (
     NormalizedReviewRequest,
     SourceManifestEntry,
     SourceRef,
+    SourceType,
     WorkflowModel,
+    source_refs_from_financial_metrics,
     validate_source_ref_registered_and_consistent,
 )
 
@@ -101,6 +103,63 @@ ROLE_CONTEXT_KEYS: dict[AgentRole, tuple[str, ...]] = {
         "bull_case",
         "bear_case",
     ),
+}
+
+PRESENTATION_TAG_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "actuals": ("actual", "actuals", "reported", "results", "delivered"),
+    "pnl": ("eps", "earnings", "gross margin", "operating income", "profitability"),
+    "cash_flow": (
+        "cash flow",
+        "free cash flow",
+        "operating cash flow",
+        "fcf",
+        "capex",
+        "capital expenditure",
+    ),
+    "balance_sheet": (
+        "balance sheet",
+        "cash and equivalents",
+        "debt",
+        "liquidity",
+        "working capital",
+    ),
+    "segment": ("segment", "segments"),
+    "guidance": ("guidance", "guided", "guide", "forecast", "target"),
+    "outlook": ("outlook", "next quarter", "full year", "fiscal year", "expect"),
+    "assumptions": ("assume", "assumes", "assuming", "assumption", "assumptions"),
+    "management": ("management", "ceo", "cfo", "leadership", "executive"),
+    "strategy": ("strategy", "strategic", "roadmap", "priority", "priorities"),
+    "demand": ("demand", "pipeline", "backlog", "customer", "adoption"),
+    "supply": ("supply", "inventory", "capacity", "constraints", "lead time"),
+    "capital_allocation": (
+        "capital allocation",
+        "buyback",
+        "repurchase",
+        "dividend",
+        "shareholder return",
+    ),
+    "risk": ("risk", "risks", "headwind", "pressure", "challenge", "uncertainty"),
+    "gaap_non_gaap_reconciliation": ("gaap", "non-gaap", "non gaap", "reconciliation"),
+    "one_time_items": ("one-time", "one time", "nonrecurring", "impairment", "restructuring"),
+}
+
+TAG_ROUTING_TOPICS: dict[str, tuple[str, ...]] = {
+    "actuals": ("actuals",),
+    "pnl": ("pnl",),
+    "cash_flow": ("cash_flow",),
+    "balance_sheet": ("balance_sheet",),
+    "segment": ("segments",),
+    "guidance": ("guidance",),
+    "outlook": ("guidance",),
+    "assumptions": ("guidance",),
+    "management": ("management",),
+    "strategy": ("strategy",),
+    "demand": ("management",),
+    "supply": ("management",),
+    "capital_allocation": ("capital_allocation",),
+    "risk": ("risk",),
+    "gaap_non_gaap_reconciliation": ("gaap_non_gaap_reconciliation",),
+    "one_time_items": ("one_time_items",),
 }
 
 
@@ -213,27 +272,81 @@ class ContextRouter:
         sections_by_topic = self._sections_by_topic(request.document_sections)
         metrics_json = request.financial_metrics.model_dump(mode="json", exclude_none=True)
         financial_source_ids = [
-            source_ref.source_id for source_ref in request.financial_metrics.source_refs
+            source_ref.source_id
+            for source_ref in source_refs_from_financial_metrics(request.financial_metrics)
         ]
+        earnings_quality_topics = {
+            "actuals",
+            "pnl",
+            "eps",
+            "revenue",
+            "segments",
+            "gaap_non_gaap_reconciliation",
+            "one_time_items",
+            "other",
+        }
+        cash_flow_risk_topics = {
+            "cash_flow",
+            "balance_sheet",
+            "capital_allocation",
+            "risk",
+            "other",
+        }
+        management_intent_topics = {
+            "management",
+            "strategy",
+            "capital_allocation",
+            "segments",
+            "guidance",
+        }
+        guidance_topics = {"guidance"}
+
+        earnings_quality_sections = self._sections_for_topics(
+            sections_by_topic,
+            earnings_quality_topics,
+        )
+        cash_flow_risk_sections = self._sections_for_topics(
+            sections_by_topic,
+            cash_flow_risk_topics,
+        )
+        management_sections = self._sections_for_topics(
+            sections_by_topic,
+            {"management", "guidance", "segments"},
+        )
+        management_intent_sections = self._sections_for_topics(
+            sections_by_topic,
+            management_intent_topics | {"other"},
+        )
+        strategy_sections = self._sections_for_topics(
+            sections_by_topic,
+            {"strategy", "management", "capital_allocation", "segments", "other"},
+        )
+        guidance_sections = self._sections_for_topics(sections_by_topic, guidance_topics)
+        guidance_assumptions_sections = self._sections_for_topics(
+            sections_by_topic,
+            {"guidance"},
+        )
+        guidance_inputs = self._guidance_inputs(
+            request,
+            metrics_json,
+            guidance_sections,
+            guidance_assumptions_sections,
+        )
+        guidance_deltas = guidance_inputs["guidance_deltas"]
 
         raw_contexts: dict[AgentRole, tuple[dict[str, Any], list[str]]] = {
             AgentRole.EARNINGS_QUALITY: (
                 {
                     "run_spec": self._run_spec(request),
                     "earnings_quality_metrics": metrics_json,
-                    "earnings_quality_sections": (
-                        sections_by_topic["eps"]
-                        + sections_by_topic["revenue"]
-                        + sections_by_topic["segments"]
-                        + sections_by_topic["other"]
-                    ),
+                    "earnings_quality_sections": earnings_quality_sections,
                     "analysis_config": self._analysis_config(),
                 },
                 [
                     *financial_source_ids,
                     *self._source_ids_for_topics(
                         request.document_sections,
-                        {"eps", "revenue", "segments", "other"},
+                        earnings_quality_topics,
                     ),
                 ],
             ),
@@ -241,11 +354,7 @@ class ContextRouter:
                 {
                     "run_spec": self._run_spec(request),
                     "cash_flow_risk_metrics": metrics_json,
-                    "cash_flow_risk_sections": (
-                        sections_by_topic["other"]
-                        + sections_by_topic["risk"]
-                        + sections_by_topic["guidance"]
-                    ),
+                    "cash_flow_risk_sections": cash_flow_risk_sections,
                     "cash_conversion_inputs": metrics_json,
                     "analysis_config": self._analysis_config(),
                 },
@@ -253,7 +362,7 @@ class ContextRouter:
                     *financial_source_ids,
                     *self._source_ids_for_topics(
                         request.document_sections,
-                        {"other", "risk", "guidance"},
+                        cash_flow_risk_topics,
                     ),
                 ],
             ),
@@ -261,15 +370,9 @@ class ContextRouter:
                 {
                     "run_spec": self._run_spec(request),
                     "financial_snapshot_minimal": self._minimal_snapshot(metrics_json),
-                    "management_sections": (
-                        sections_by_topic["guidance"] + sections_by_topic["segments"]
-                    ),
-                    "management_intent_sections": (
-                        sections_by_topic["guidance"]
-                        + sections_by_topic["segments"]
-                        + sections_by_topic["other"]
-                    ),
-                    "strategy_sections": sections_by_topic["segments"] + sections_by_topic["other"],
+                    "management_sections": management_sections,
+                    "management_intent_sections": management_intent_sections,
+                    "strategy_sections": strategy_sections,
                     "mdna_sections": sections_by_topic["other"],
                     "risk_sections": sections_by_topic["risk"],
                     "analysis_config": self._analysis_config(),
@@ -278,27 +381,28 @@ class ContextRouter:
                     *financial_source_ids,
                     *self._source_ids_for_topics(
                         request.document_sections,
-                        {"guidance", "segments", "other", "risk"},
+                        management_intent_topics | {"other", "risk"},
                     ),
                 ],
             ),
             AgentRole.GUIDANCE: (
                 {
                     "run_spec": self._run_spec(request),
-                    "guidance_metrics": metrics_json,
-                    "guidance_consensus_deltas": metrics_json,
-                    "consensus_deltas": metrics_json,
-                    "guidance_sections": sections_by_topic["guidance"],
-                    "guidance_assumptions_sections": (
-                        sections_by_topic["guidance"] + sections_by_topic["risk"]
-                    ),
+                    "guidance_metrics": guidance_inputs,
+                    "guidance_consensus_deltas": guidance_deltas,
+                    "consensus_deltas": guidance_deltas,
+                    "guidance_sections": guidance_sections,
+                    "guidance_assumptions_sections": guidance_assumptions_sections,
                     "prior_guidance_track_record": [],
                     "management_intent_handoff": None,
                     "analysis_config": self._analysis_config(),
                 },
                 [
                     *financial_source_ids,
-                    *self._source_ids_for_topics(request.document_sections, {"guidance", "risk"}),
+                    *self._source_ids_for_topics(
+                        request.document_sections,
+                        guidance_topics,
+                    ),
                 ],
             ),
             AgentRole.BULL: (
@@ -375,7 +479,7 @@ class ContextRouter:
                 "document_sections",
             )
 
-        for source_ref in request.financial_metrics.source_refs:
+        for source_ref in source_refs_from_financial_metrics(request.financial_metrics):
             self._validate_source_ref(
                 source_ref,
                 request.source_manifest,
@@ -498,17 +602,125 @@ class ContextRouter:
             if key in metrics_json
         }
 
+    def _guidance_inputs(
+        self,
+        request: NormalizedReviewRequest,
+        metrics_json: Mapping[str, Any],
+        guidance_sections: list[dict[str, Any]],
+        guidance_assumptions_sections: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        company_guidance = []
+        if metrics_json.get("guidance"):
+            company_guidance.append(
+                {
+                    "metric_name": "guidance_text",
+                    "text": metrics_json["guidance"],
+                    "reported_period": request.fiscal_period,
+                }
+            )
+
+        consensus_estimates = []
+        for metric_name in ("revenue", "eps"):
+            consensus_key = f"{metric_name}_consensus"
+            if metrics_json.get(consensus_key) is not None:
+                consensus_estimates.append(
+                    {
+                        "metric_name": metric_name,
+                        "value": metrics_json[consensus_key],
+                        "reported_period": request.fiscal_period,
+                    }
+                )
+
+        availability: list[dict[str, str]] = []
+        if not company_guidance:
+            availability.append(
+                {
+                    "item": "company_guidance",
+                    "status": "company_guidance_missing",
+                    "reason": "No company guidance text is available in routed inputs.",
+                }
+            )
+        elif not consensus_estimates:
+            availability.append(
+                {
+                    "item": "guidance_deltas",
+                    "status": "consensus_missing",
+                    "reason": "No consensus estimate is available for guidance comparison.",
+                }
+            )
+        else:
+            availability.append(
+                {
+                    "item": "guidance_deltas",
+                    "status": "company_guidance_metric_missing",
+                    "reason": (
+                        "No explicit company guidance metric is available for consensus comparison."
+                    ),
+                }
+            )
+
+        return {
+            "company_guidance": company_guidance,
+            "consensus_estimates": consensus_estimates,
+            "guidance_deltas": [],
+            "presentation_sections": [
+                section
+                for section in guidance_sections
+                if section.get("source_ref", {}).get("source_type")
+                == SourceType.EARNINGS_PRESENTATION.value
+            ],
+            "sec_sections": [
+                section
+                for section in guidance_assumptions_sections
+                if section.get("source_ref", {}).get("source_type") == SourceType.FILING.value
+            ],
+            "availability": availability,
+        }
+
+    def _sections_for_topics(
+        self,
+        sections_by_topic: Mapping[str, list[dict[str, Any]]],
+        topics: set[str],
+    ) -> list[dict[str, Any]]:
+        merged: list[dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+        for topic in sorted(topics):
+            for section in sections_by_topic.get(topic, []):
+                source_id = section.get("source_ref", {}).get("source_id", "")
+                section_id = section.get("section_id", "")
+                key = (str(source_id), str(section_id))
+                if key in seen:
+                    continue
+                seen.add(key)
+                merged.append(section)
+        return merged
+
     def _sections_by_topic(
         self,
         sections: list[DocumentSection],
     ) -> dict[str, list[dict[str, Any]]]:
-        grouped: dict[str, list[dict[str, Any]]] = {
-            name: [] for name in ("eps", "revenue", "guidance", "segments", "risk", "other")
-        }
+        topic_names = (
+            "actuals",
+            "pnl",
+            "cash_flow",
+            "balance_sheet",
+            "eps",
+            "revenue",
+            "guidance",
+            "segments",
+            "management",
+            "strategy",
+            "capital_allocation",
+            "risk",
+            "gaap_non_gaap_reconciliation",
+            "one_time_items",
+            "other",
+        )
+        grouped: dict[str, list[dict[str, Any]]] = {name: [] for name in topic_names}
         for section in sections:
-            grouped[self._infer_topic(section)].append(
-                section.model_dump(mode="json", exclude_none=True)
-            )
+            payload = self._section_payload(section)
+            for topic in self._routing_topics(section):
+                grouped[topic].append(payload)
         return grouped
 
     def _source_ids_for_topics(
@@ -519,10 +731,46 @@ class ContextRouter:
         return [
             section.source_ref.source_id
             for section in sections
-            if self._infer_topic(section) in topics
+            if set(self._routing_topics(section)) & topics
         ]
 
-    def _infer_topic(self, section: DocumentSection) -> str:
+    def _section_payload(self, section: DocumentSection) -> dict[str, Any]:
+        payload = section.model_dump(mode="json", exclude_none=True)
+        tags = self._presentation_tags(section)
+        if tags:
+            payload["presentation_tags"] = tags
+        return payload
+
+    def _routing_topics(self, section: DocumentSection) -> tuple[str, ...]:
+        tags = self._presentation_tags(section)
+        if not tags:
+            return (self._fallback_topic(section),)
+
+        topics: list[str] = []
+        for tag in tags:
+            for topic in TAG_ROUTING_TOPICS.get(tag, ()):
+                if topic not in topics:
+                    topics.append(topic)
+        return tuple(topics or (self._fallback_topic(section),))
+
+    def _presentation_tags(self, section: DocumentSection) -> list[str]:
+        if section.source_ref.source_type != SourceType.EARNINGS_PRESENTATION:
+            return []
+
+        body_tags = self._keyword_tags(section.text)
+        if body_tags:
+            return body_tags
+        return self._keyword_tags(f"{section.section_id} {section.heading}")
+
+    def _keyword_tags(self, text: str) -> list[str]:
+        lowered = text.lower()
+        return [
+            tag
+            for tag, keywords in PRESENTATION_TAG_KEYWORDS.items()
+            if any(keyword in lowered for keyword in keywords)
+        ]
+
+    def _fallback_topic(self, section: DocumentSection) -> str:
         label = f"{section.section_id} {section.heading}".lower()
         if "eps" in label or "earnings" in label:
             return "eps"

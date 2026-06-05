@@ -7,9 +7,9 @@ Apply this policy to every agent output.
 Use the frozen trace vocabulary. Do not invent alternate field names.
 
 `ReportMatrix` groups `source_manifest`, `evidence_items`, `claim_records`,
-`decision_uses`, and `missing_data_items`. Agent outputs are narrower than the
-full matrix, but every evidence-bearing answer must stay compatible with these
-names.
+`decision_uses`, `missing_data_items`, and `data_quality_flags`. Agent outputs
+are narrower than the full matrix, but every evidence-bearing answer must stay
+compatible with these names.
 
 `EvidenceItem` fields are `evidence_id`, `polarity`, `summary`, `detail`,
 `impact_areas`, `source_ref`, `metric_name`, `value`, `unit`, `quote`,
@@ -24,13 +24,14 @@ names.
 `confidence_impact`.
 
 `MissingDataItem` fields are `missing_data_id`, `topic`, `reason`,
-`materiality`, `requested_source_type`, and `blocks_verdict`.
+`materiality`, `requested_source_type`, `status`, and `blocks_verdict`.
 `MissingDataItem` is report-matrix vocabulary, not a top-level field every role
 can emit.
 
 `SourceRef` fields are `source_id`, `source_type`, `title`, `url`,
 `document_id`, `section_id`, `page`, `line_start`, `line_end`, `line_range`,
-`metric_name`, `reported_period`, and `as_of_date`.
+`metric_name`, `reported_period`, `as_of_date`, `provider`,
+`provider_row_date`, `provider_column_date`, and `period_role`.
 
 The workflow may provide `source_index` as a compact lookup view over
 `source_manifest`. Treat `source_manifest` as the authoritative registration
