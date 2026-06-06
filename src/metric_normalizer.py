@@ -70,7 +70,10 @@ SOURCE_ALIASES: dict[str, dict[str, tuple[str, ...]]] = {
         "operating_income": ("OperatingIncomeLoss",),
         "operating_margin": ("OperatingMargin",),
         "operating_cash_flow": ("NetCashProvidedByUsedInOperatingActivities",),
-        "capex": ("PaymentsToAcquirePropertyPlantAndEquipment",),
+        "capex": (
+            "PaymentsToAcquirePropertyPlantAndEquipment",
+            "PaymentsToAcquireProductiveAssets",
+        ),
         "free_cash_flow": ("FreeCashFlow",),
     },
 }

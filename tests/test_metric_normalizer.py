@@ -34,6 +34,17 @@ def test_sec_revenue_tags_resolve_to_revenue(raw_key):
     assert resolve_canonical_metric("sec", raw_key) == "revenue"
 
 
+@pytest.mark.parametrize(
+    "raw_key",
+    [
+        "PaymentsToAcquirePropertyPlantAndEquipment",
+        "PaymentsToAcquireProductiveAssets",
+    ],
+)
+def test_sec_capex_tags_resolve_to_capex(raw_key):
+    assert resolve_canonical_metric("sec", raw_key) == "capex"
+
+
 def test_unknown_raw_key_can_be_kept_as_unmapped_metric():
     raw_key = "DefinitelyNotAKnownMetric"
 
