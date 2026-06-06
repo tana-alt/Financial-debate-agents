@@ -28,3 +28,7 @@ outputs/*
 !outputs/sample-nvda-20260603/**
 !outputs/sample-zs-20260603/
 !outputs/sample-zs-20260603/**
+!outputs/sample-nvda-20260607/
+!outputs/sample-nvda-20260607/**
+!outputs/sample-zs-20260607/
+!outputs/sample-zs-20260607/**
