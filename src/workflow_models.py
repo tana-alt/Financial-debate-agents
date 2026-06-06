@@ -26,6 +26,7 @@ from pydantic import (
 from src.workflow_errors import WorkflowErrorCategory
 
 NonEmptyText = Annotated[str, Field(min_length=1)]
+EvidenceId = Annotated[str, Field(min_length=1, max_length=80)]
 
 
 class WorkflowModel(BaseModel):
@@ -79,6 +80,8 @@ class MetricPeriodRole(str, Enum):
     ACTUAL = "actual"
     CONSENSUS = "consensus"
     GUIDANCE = "guidance"
+    PREVIOUS_QUARTER = "previous_quarter"
+    YEAR_AGO_QUARTER = "year_ago_quarter"
     PRIOR_PERIOD = "prior_period"
     FUTURE_GUIDANCE = "future_guidance"
     TARGET_PERIOD_DOCUMENT = "target_period_document"
@@ -227,6 +230,7 @@ RAW_ACQUISITION_FIELDS = frozenset(
         "local_path",
     }
 )
+MAX_MARKDOWN_REPORT_CHARS = 200_000
 
 
 def raw_acquisition_fields_in(payload: Mapping[str, Any]) -> set[str]:
@@ -1025,6 +1029,29 @@ class AgentResult(WorkflowModel):
         return value
 
 
+class AgentAttemptTrace(WorkflowModel):
+    attempt: int = Field(ge=1)
+    success: bool = False
+    structured_output: bool = False
+    input_tokens: int = Field(default=0, ge=0)
+    output_tokens: int = Field(default=0, ge=0)
+    output_chars: int = Field(default=0, ge=0)
+    category: WorkflowErrorCategory | None = None
+    error_kind: str | None = Field(default=None, max_length=80)
+    retryable: bool = False
+
+
+class AgentExecutionTrace(WorkflowModel):
+    public_role: str = Field(min_length=1, max_length=80)
+    output_model: str = Field(min_length=1, max_length=120)
+    max_retries: int = Field(ge=0)
+    attempt_count: int = Field(ge=0)
+    success: bool = False
+    total_input_tokens: int = Field(default=0, ge=0)
+    total_output_tokens: int = Field(default=0, ge=0)
+    attempts: list[AgentAttemptTrace] = Field(default_factory=list, max_length=10)
+
+
 class AgentFinding(WorkflowModel):
     agent_name: str = Field(min_length=1, max_length=80)
     stance: Literal["positive", "negative", "mixed", "neutral", "unclear"]
@@ -1110,6 +1137,12 @@ def validate_finding_coverage_keys(coverage: FindingCoverageMap) -> FindingCover
     return coverage
 
 
+def validate_unique_evidence_ids(value: list[str]) -> list[str]:
+    if len(value) != len(set(value)):
+        raise ValueError("evidence ids must be unique")
+    return value
+
+
 class AnalysisBrief(WorkflowModel):
     ticker: str = Field(min_length=1, max_length=15)
     fiscal_period: str = Field(pattern=r"^\d{4}Q[1-4]$")
@@ -1122,6 +1155,7 @@ class AnalysisBrief(WorkflowModel):
     positive_evidence_pool: list[EvidenceItem] = Field(default_factory=list, max_length=30)
     negative_evidence_pool: list[EvidenceItem] = Field(default_factory=list, max_length=30)
     risk_evidence_pool: list[EvidenceItem] = Field(default_factory=list, max_length=30)
+    quality_warnings: list[AvailabilityItem] = Field(default_factory=list, max_length=100)
     synthesis: str = Field(min_length=1, max_length=2000)
 
     @field_validator("ticker", mode="before")
@@ -1163,6 +1197,31 @@ class BullCase(WorkflowModel):
         return validate_finding_coverage_keys(value)
 
 
+class BullCaseSelection(WorkflowModel):
+    agent_name: Literal["bull_agent"] = "bull_agent"
+    thesis: str = Field(min_length=1, max_length=2000)
+    stance_strength: Literal["strong", "moderate", "weak"]
+    strongest_positive_evidence_ids: list[EvidenceId] = Field(min_length=1, max_length=3)
+    eps_bull_argument: str = Field(min_length=1, max_length=1200)
+    fcf_bull_argument: str = Field(min_length=1, max_length=1200)
+    conditions_needed: list[NonEmptyText] = Field(min_length=1, max_length=8)
+    weak_points: list[NonEmptyText] = Field(min_length=1, max_length=8)
+    finding_coverage: FindingCoverageMap = Field(min_length=4, max_length=4)
+    disputed_points_to_watch: list[NonEmptyText] = Field(default_factory=list, max_length=8)
+    confidence: float = Field(ge=0.0, le=1.0)
+    missing_data: list[NonEmptyText] = Field(default_factory=list, max_length=8)
+
+    @field_validator("finding_coverage")
+    @classmethod
+    def validate_finding_coverage(cls, value: FindingCoverageMap) -> FindingCoverageMap:
+        return validate_finding_coverage_keys(value)
+
+    @field_validator("strongest_positive_evidence_ids")
+    @classmethod
+    def validate_unique_ids(cls, value: list[str]) -> list[str]:
+        return validate_unique_evidence_ids(value)
+
+
 class BearCase(WorkflowModel):
     agent_name: Literal["bear_agent"] = "bear_agent"
     thesis: str = Field(min_length=1, max_length=2000)
@@ -1181,6 +1240,31 @@ class BearCase(WorkflowModel):
     @classmethod
     def validate_finding_coverage(cls, value: FindingCoverageMap) -> FindingCoverageMap:
         return validate_finding_coverage_keys(value)
+
+
+class BearCaseSelection(WorkflowModel):
+    agent_name: Literal["bear_agent"] = "bear_agent"
+    thesis: str = Field(min_length=1, max_length=2000)
+    stance_strength: Literal["strong", "moderate", "weak"]
+    strongest_negative_evidence_ids: list[EvidenceId] = Field(min_length=1, max_length=3)
+    eps_bear_argument: str = Field(min_length=1, max_length=1200)
+    fcf_bear_argument: str = Field(min_length=1, max_length=1200)
+    failure_modes: list[NonEmptyText] = Field(min_length=1, max_length=8)
+    counter_to_bull_case: list[NonEmptyText] = Field(min_length=1, max_length=8)
+    finding_coverage: FindingCoverageMap = Field(min_length=4, max_length=4)
+    unresolved_risks: list[NonEmptyText] = Field(default_factory=list, max_length=8)
+    confidence: float = Field(ge=0.0, le=1.0)
+    missing_data: list[NonEmptyText] = Field(default_factory=list, max_length=8)
+
+    @field_validator("finding_coverage")
+    @classmethod
+    def validate_finding_coverage(cls, value: FindingCoverageMap) -> FindingCoverageMap:
+        return validate_finding_coverage_keys(value)
+
+    @field_validator("strongest_negative_evidence_ids")
+    @classmethod
+    def validate_unique_ids(cls, value: list[str]) -> list[str]:
+        return validate_unique_evidence_ids(value)
 
 
 class JudgeDecision(WorkflowModel):
@@ -1203,18 +1287,41 @@ class JudgeDecision(WorkflowModel):
 FinalVerdict = JudgeDecision
 
 
+class JudgeDecisionSelection(WorkflowModel):
+    verdict: VerdictLabel
+    confidence: float = Field(ge=0.0, le=1.0)
+    summary: str = Field(min_length=1, max_length=1200)
+    rationale: str = Field(min_length=1, max_length=2000)
+    positive_evidence_ids: list[EvidenceId] = Field(min_length=1, max_length=3)
+    negative_evidence_ids: list[EvidenceId] = Field(min_length=1, max_length=3)
+    eps_outlook: str = Field(min_length=1, max_length=1200)
+    eps_outlook_reason: str = Field(min_length=1, max_length=2000)
+    fcf_outlook: str = Field(min_length=1, max_length=1200)
+    fcf_outlook_reason: str = Field(min_length=1, max_length=2000)
+    purpose: Literal["earnings_review_not_investment_advice"] = (
+        "earnings_review_not_investment_advice"
+    )
+    is_investment_advice: Literal[False] = False
+
+    @field_validator("positive_evidence_ids", "negative_evidence_ids")
+    @classmethod
+    def validate_unique_ids(cls, value: list[str]) -> list[str]:
+        return validate_unique_evidence_ids(value)
+
+
 class ReviewResponse(WorkflowModel):
     request_id: str | None = Field(default=None, max_length=80)
     ticker: str = Field(min_length=1, max_length=15)
     fiscal_period: str = Field(pattern=r"^\d{4}Q[1-4]$")
     steps: list[StepStatus] = Field(min_length=1, max_length=20)
+    agent_traces: list[AgentExecutionTrace] = Field(default_factory=list, max_length=20)
     financial_metrics: FinancialMetrics | None = None
     analysis_brief: AnalysisBrief
     bull_case: BullCase
     bear_case: BearCase
     debate_result: DebateResult
     judge_decision: JudgeDecision
-    markdown_report: str = Field(min_length=1, max_length=20000)
+    markdown_report: str = Field(min_length=1, max_length=MAX_MARKDOWN_REPORT_CHARS)
     purpose: Literal["earnings_review_not_investment_advice"] = (
         "earnings_review_not_investment_advice"
     )
@@ -1262,6 +1369,7 @@ class ReviewSuccessResponse(WorkflowModel):
     ticker: str = Field(min_length=1, max_length=15)
     fiscal_period: str = Field(pattern=r"^\d{4}Q[1-4]$")
     steps: list[StepStatus] = Field(min_length=1, max_length=20)
+    agent_traces: list[AgentExecutionTrace] = Field(default_factory=list, max_length=20)
     analysis_brief: AnalysisBrief
     claim_matrix: ReportMatrix
     bull_case: BullCase
@@ -1270,7 +1378,7 @@ class ReviewSuccessResponse(WorkflowModel):
     judge_decision: JudgeDecision
     decision_uses: list[DecisionUse] = Field(default_factory=list, max_length=100)
     quality_gate_result: dict[str, Any] = Field(default_factory=dict)
-    markdown_report: str = Field(min_length=1, max_length=20000)
+    markdown_report: str = Field(min_length=1, max_length=MAX_MARKDOWN_REPORT_CHARS)
     disclaimer: str = Field(
         default="This report is an earnings analysis artifact and is not investment advice.",
         min_length=1,

@@ -42,10 +42,11 @@ def test_cli_fake_smoke_writes_report_and_workflow_result(monkeypatch, tmp_path)
     for expected in (
         "NVDA",
         "2025Q3",
-        "## Judge Rationale",
-        "## Evidence Matrix",
-        "## Quality Gates",
-        "## Disclaimer",
+        "## レポート前提: canonical data",
+        "## 判定理由",
+        "## 根拠マトリクス (Evidence Matrix)",
+        "## 品質ゲート (Quality Gates)",
+        "## 免責事項",
         "| Claim ID | Fact | Interpretation | Implication | Time scope |",
     ):
         assert expected in report
@@ -74,8 +75,8 @@ def test_cli_fake_smoke_accepts_document_files(monkeypatch, tmp_path):
     workflow_result = json.loads((out_dir / "workflow_result.json").read_text(encoding="utf-8"))
     assert workflow_result["ticker"] == "NVDA"
     assert workflow_result["judge_decision"]["verdict"] in {"good", "neutral", "bad"}
-    assert "## Evidence Matrix" in report
-    assert "## Source Appendix" in report
+    assert "## 根拠マトリクス (Evidence Matrix)" in report
+    assert "## ソース付録 (Source Appendix)" in report
 
 
 def test_cli_fake_smoke_accepts_current_local_presentation_sample(monkeypatch, tmp_path):
@@ -101,8 +102,8 @@ def test_cli_fake_smoke_accepts_current_local_presentation_sample(monkeypatch, t
     workflow_result = json.loads((out_dir / "workflow_result.json").read_text(encoding="utf-8"))
     assert workflow_result["ticker"] == "NVDA"
     assert workflow_result["judge_decision"]["verdict"] in {"good", "neutral", "bad"}
-    assert "## Data Quality Flags" in report
-    assert "## Evidence Matrix" in report
+    assert "## データ品質" in report
+    assert "## 根拠マトリクス (Evidence Matrix)" in report
     assert "current-sample-presentation:section-1" in report
 
 

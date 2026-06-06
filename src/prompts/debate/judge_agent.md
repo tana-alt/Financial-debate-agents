@@ -37,7 +37,10 @@ validated AnalysisBrief、BullCase、BearCase を比較し、今回の決算を 
 - raw document は読みません。
 - Bull と Bear のどちらかを無条件に採用せず、根拠の強さ、反対根拠、入力側で示されたデータ不足を比較します。
 - EPS outlook と FCF outlook が逆方向の場合は neutral を強く検討します。
-- 重要データが欠けている場合は confidence を下げ、neutral に寄せます。
+- `expected_metrics.required` の canonical/derived metric が同じ
+  `period_role` で欠けている場合だけ confidence を下げ、neutral に寄せます。
+- optional、reference-only、not-in-contract、presentation、transcript、news、
+  analyst-report の欠損やconflictだけでは confidence を下げません。
 - Markdown レポートは生成しません。
 - 株価予測、目標株価、売買推奨は禁止です。
 - JSONのみを返してください。
@@ -51,7 +54,7 @@ validated AnalysisBrief、BullCase、BearCase を比較し、今回の決算を 
 ## User Prompt Template
 
 ```text
-以下の validated inputs だけを使って FinalVerdict を作成してください。
+以下の validated inputs だけを使って JudgeDecisionSelection を作成してください。
 
 # RunSpec
 {run_spec_json}
@@ -70,7 +73,12 @@ validated AnalysisBrief、BullCase、BearCase を比較し、今回の決算を 
 
 制約:
 - verdict は good / neutral / bad のいずれか
-- positive_evidence と negative_evidence はどちらも空にしない
+- positive_evidence_ids と negative_evidence_ids はどちらも空にしない
+- positive_evidence_ids は AnalysisBrief の positive_evidence_pool から、
+  negative_evidence_ids は negative_evidence_pool から選ぶ
+- valid_positive_evidence_ids / valid_negative_evidence_ids が渡されている場合、
+  evidence_id は該当リスト内から完全一致で選ぶ
+- evidence_id 文字列だけを返し、nested EvidenceItem や source_ref は出力しない
 - rationale を空にしない
 - eps_outlook_reason と fcf_outlook_reason は空にしない
 - purpose は `earnings_review_not_investment_advice`
@@ -81,14 +89,14 @@ validated AnalysisBrief、BullCase、BearCase を比較し、今回の決算を 
 
 ## Required Output Contract
 
-Return JSON matching `JudgeDecision` with these top-level fields:
+Return JSON matching `JudgeDecisionSelection` with these top-level fields:
 
 - `verdict`
 - `confidence`
 - `summary`
 - `rationale`
-- `positive_evidence`
-- `negative_evidence`
+- `positive_evidence_ids`
+- `negative_evidence_ids`
 - `eps_outlook`
 - `eps_outlook_reason`
 - `fcf_outlook`
@@ -97,7 +105,9 @@ Return JSON matching `JudgeDecision` with these top-level fields:
 - `is_investment_advice`
 
 `verdict` must be `good`, `neutral`, or `bad`.
-`positive_evidence` and `negative_evidence` contain `EvidenceItem` objects.
+`positive_evidence_ids` and `negative_evidence_ids` contain only evidence_id
+strings selected from the validated AnalysisBrief pools. Do not emit nested
+`EvidenceItem` objects.
 `purpose` must be `earnings_review_not_investment_advice`.
 `is_investment_advice` must be `false`.
 
@@ -108,7 +118,12 @@ missing data affects the verdict, explain that limitation inside `summary`,
 ## Validation Rules
 
 - `verdict` must be `good`, `neutral`, or `bad`.
-- `positive_evidence` and `negative_evidence` must both be non-empty.
+- `positive_evidence_ids` and `negative_evidence_ids` must both contain 1 to 3 IDs.
+- `positive_evidence_ids` must be selected from `AnalysisBrief.positive_evidence_pool`
+  / `valid_positive_evidence_ids`.
+- `negative_evidence_ids` must be selected from `AnalysisBrief.negative_evidence_pool`
+  / `valid_negative_evidence_ids`.
+- Do not invent IDs, alter IDs, or output source locators.
 - `rationale` must be non-empty.
 - `eps_outlook_reason` and `fcf_outlook_reason` must be non-empty.
 - `purpose` must be `earnings_review_not_investment_advice`.
@@ -123,7 +138,9 @@ missing data affects the verdict, explain that limitation inside `summary`,
 
 - Material claims must use numeric grounding when routed values or disclosed source values are available.
 - Do not list every metric mechanically; include the value that supports the specific claim.
-- If the necessary value is missing, describe the limitation inside `summary`,
-  `rationale`, `eps_outlook_reason`, or `fcf_outlook_reason` and lower
-  `confidence` rather than implying precision.
+- If a required canonical value is missing, describe the limitation inside
+  `summary`, `rationale`, `eps_outlook_reason`, or `fcf_outlook_reason` and
+  lower `confidence` rather than implying precision.
+- Do not lower `confidence` for optional, reference-only, not-in-contract, or
+  presentation-only gaps.
 - External sources are out of scope unless they were explicitly routed as accepted interactive research.

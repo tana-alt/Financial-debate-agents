@@ -26,17 +26,22 @@ class InvestmentAdviceMarkdownRenderer(MarkdownRenderer):
         return "You should buy the stock.\n"
 
 
-def test_specialist_output_containing_buy_the_stock_fails(monkeypatch):
+def test_specialist_output_containing_buy_the_stock_warns_and_redacts(monkeypatch):
     monkeypatch.setattr("src.workflow._fetch_consensus", lambda *args, **kwargs: None)
     monkeypatch.setattr("src.workflow._fetch_filing_html", lambda *args, **kwargs: "")
 
     workflow = ReviewWorkflow(llm=InvestmentAdviceSpecialistLLM())
 
-    with pytest.raises(WorkflowValidationError, match="investment-advice language"):
-        workflow.run(ReviewRequest.model_validate(_request_payload()))
+    response = workflow.run(ReviewRequest.model_validate(_request_payload()))
+
+    assert "buy the stock" not in response.markdown_report.lower()
+    assert any(
+        item.key.startswith("llm_investment_advice:")
+        for item in response.analysis_brief.quality_warnings
+    )
 
 
-def test_judge_output_containing_target_price_language_fails(monkeypatch):
+def test_judge_output_containing_target_price_language_warns_and_redacts(monkeypatch):
     monkeypatch.setattr("src.workflow._fetch_consensus", lambda *args, **kwargs: None)
     monkeypatch.setattr("src.workflow._fetch_filing_html", lambda *args, **kwargs: "")
 
@@ -46,11 +51,16 @@ def test_judge_output_containing_target_price_language_fails(monkeypatch):
 
     workflow = ReviewWorkflow(llm=TargetPriceJudgeLLM())
 
-    with pytest.raises(WorkflowValidationError, match="investment-advice language"):
-        workflow.run(ReviewRequest.model_validate(_request_payload()))
+    response = workflow.run(ReviewRequest.model_validate(_request_payload()))
+
+    assert "price target" not in response.markdown_report.lower()
+    assert any(
+        item.key.startswith("llm_investment_advice:judge_decision")
+        for item in response.analysis_brief.quality_warnings
+    )
 
 
-def test_final_markdown_containing_investment_advice_fails(monkeypatch):
+def test_final_markdown_containing_investment_advice_warns_and_redacts(monkeypatch):
     monkeypatch.setattr("src.workflow._fetch_consensus", lambda *args, **kwargs: None)
     monkeypatch.setattr("src.workflow._fetch_filing_html", lambda *args, **kwargs: "")
 
@@ -59,8 +69,31 @@ def test_final_markdown_containing_investment_advice_fails(monkeypatch):
         renderer=InvestmentAdviceMarkdownRenderer(),
     )
 
-    with pytest.raises(WorkflowValidationError, match="markdown_report contains"):
-        workflow.run(ReviewRequest.model_validate(_request_payload()))
+    response = workflow.run(ReviewRequest.model_validate(_request_payload()))
+
+    assert "buy the stock" not in response.markdown_report.lower()
+    assert any(
+        item.key == "llm_investment_advice:markdown_report"
+        for item in response.analysis_brief.quality_warnings
+    )
+
+
+def test_investment_advice_redaction_does_not_change_source_metadata():
+    validator = WorkflowValidationGate()
+    payload = {
+        "summary": "EPS improved by 8%.",
+        "source_ref": {
+            "source_id": "filing:price-target",
+            "source_type": "filing",
+            "document_id": "10q-2025q3",
+            "section_id": "price-target",
+            "title": "Price target appendix",
+            "reported_period": "2025Q3",
+        },
+    }
+
+    assert validator.investment_advice_warnings(payload, "finding") == []
+    assert validator.sanitize_investment_advice_text(payload) == payload
 
 
 def test_long_position_language_fails_direct_safety_gate():
@@ -102,5 +135,6 @@ def test_non_advice_disclaimer_continues_to_render(monkeypatch):
 
     response = ReviewWorkflow(llm=FakeLLM()).run(ReviewRequest.model_validate(_request_payload()))
 
-    assert "not investment advice" in response.markdown_report
+    assert "投資助言ではありません" in response.markdown_report
+    assert "[removed investment-advice language]" not in response.markdown_report
     assert response.is_investment_advice is False

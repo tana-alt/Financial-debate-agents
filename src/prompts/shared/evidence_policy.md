@@ -70,8 +70,11 @@ If no meaningful counter evidence is available in the provided context:
 
 - keep `counter_evidence` empty only if the schema allows it
 - use `missing_data` only when the role output contract includes `missing_data`
-- otherwise describe material gaps inside allowed fields and lower `confidence`
-- lower role-level `confidence` when the schema requires it
+  and the missing item is a routed `expected_metrics.required` canonical gap
+- otherwise describe required canonical gaps inside allowed fields and lower
+  `confidence`
+- do not lower role-level `confidence` for optional, reference-only,
+  not-in-contract, presentation, transcript, news, or analyst-report gaps
 
 ## Evidence Quality
 
@@ -88,7 +91,9 @@ The final verdict confidence cap is applied deterministically by the Python
 workflow. Do not invent global cap values from raw missing-data text.
 
 The workflow counts cap-relevant canonical gaps from SEC, yfinance, and derived
-canonical metrics only:
+canonical metrics only. A gap is cap-relevant only when the missing metric is
+listed in routed `expected_metrics.required` with `cap_if_missing=true` for the
+same `period_role`:
 
 - no cap-relevant canonical gaps: max `1.00`
 - one cap-relevant canonical gap: max `0.80`

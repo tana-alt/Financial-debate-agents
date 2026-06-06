@@ -14,10 +14,13 @@ from src.prompt_loader import (
     build_system_prompt,
     resolve_skill_target,
 )
-from src.workflow_agents import EarningsQualityAnalyst
+from src.workflow_agents import (
+    BearCaseSelection,
+    BullCaseSelection,
+    EarningsQualityAnalyst,
+    JudgeDecisionSelection,
+)
 from src.workflow_models import (
-    BearCase,
-    BullCase,
     CashFlowRiskFinding,
     ClaimRecord,
     ClaimType,
@@ -27,7 +30,6 @@ from src.workflow_models import (
     EvidencePolarity,
     FactCheckStatus,
     GuidanceFinding,
-    JudgeDecision,
     JudgeTreatment,
     ManagementIntentFinding,
     MissingDataItem,
@@ -109,6 +111,47 @@ def test_system_prompt_includes_shared_policy_and_one_agent_prompt():
     assert "src/prompts/index" not in system
 
 
+def test_runtime_prompts_require_japanese_natural_language_values():
+    system = build_system_prompt("JudgeAgent", "fallback scope")
+    normalized_system = " ".join(system.split())
+
+    assert "Write natural-language JSON field values in Japanese" in normalized_system
+    assert "Keep JSON schema keys" in normalized_system
+    assert "evidence_id values" in normalized_system
+    assert "source_id values" in normalized_system
+
+    class CountingLLM(LLMProvider):
+        def complete(self, system, user, max_tokens=2048, temperature=0.7):
+            return LLMResponse(text="{}", input_tokens=0, output_tokens=0)
+
+    user_prompt = EarningsQualityAnalyst(CountingLLM())._build_user_prompt({}, {})
+
+    assert "自然文のJSON field valueは日本語" in user_prompt
+    assert "JSON schema key、enum値" in user_prompt
+    assert "evidence_id、source_id、metric_name、ticker、unitは変更しない" in user_prompt
+
+
+def test_runtime_prompts_discount_company_acknowledged_uncertainty_only():
+    system = build_system_prompt("JudgeAgent", "fallback scope")
+    normalized_system = " ".join(system.split())
+
+    assert "company-authored text" in normalized_system
+    assert "material uncertainty or contingency" in normalized_system
+    assert "discount that role's `confidence`" in normalized_system
+    assert "Do not treat absent forecasts or undisclosed data" in normalized_system
+
+    class CountingLLM(LLMProvider):
+        def complete(self, system, user, max_tokens=2048, temperature=0.7):
+            return LLMResponse(text="{}", input_tokens=0, output_tokens=0)
+
+    user_prompt = EarningsQualityAnalyst(CountingLLM())._build_user_prompt({}, {})
+
+    assert "会社側テキスト" in user_prompt
+    assert "重要な不確実性や条件付きリスク" in user_prompt
+    assert "自分のconfidenceを割り引く" in user_prompt
+    assert "未記述の予想や未開示データはこの扱いにしない" in user_prompt
+
+
 @pytest.mark.parametrize("public_role", sorted(AGENT_PROMPT_FILES))
 def test_runtime_prompts_omit_provider_facing_pseudo_python_models(public_role: str):
     system = build_system_prompt(public_role, "fallback scope")
@@ -156,8 +199,8 @@ def test_runtime_prompt_schema_literals_match_workflow_models():
         ("CashFlowRiskAnalyst", CashFlowRiskFinding),
         ("ManagementIntentAnalyst", ManagementIntentFinding),
         ("GuidanceAnalyst", GuidanceFinding),
-        ("BullAgent", BullCase),
-        ("BearAgent", BearCase),
+        ("BullAgent", BullCaseSelection),
+        ("BearAgent", BearCaseSelection),
     ),
 )
 def test_runtime_prompt_agent_name_literals_match_workflow_models(
@@ -170,7 +213,7 @@ def test_runtime_prompt_agent_name_literals_match_workflow_models(
     assert f"`agent_name`: `{expected_literal}`" in system
 
 
-def test_judge_prompt_output_contract_matches_judge_decision_fields():
+def test_judge_prompt_output_contract_matches_judge_selection_fields():
     system = build_system_prompt("JudgeAgent", "fallback scope")
     output_contract = _section_between(
         system,
@@ -178,9 +221,22 @@ def test_judge_prompt_output_contract_matches_judge_decision_fields():
         "## Validation Rules",
     )
 
-    for field_name in JudgeDecision.model_fields:
+    for field_name in JudgeDecisionSelection.model_fields:
         assert f"`{field_name}`" in output_contract
+    assert "`positive_evidence`" not in output_contract
+    assert "`negative_evidence`" not in output_contract
     assert "`missing_data`" not in output_contract
+
+
+def test_judge_prompt_requires_candidate_pool_evidence_copy():
+    system = build_system_prompt("JudgeAgent", "fallback scope")
+    normalized_system = " ".join(system.split())
+
+    assert "AnalysisBrief.positive_evidence_pool" in normalized_system
+    assert "AnalysisBrief.negative_evidence_pool" in normalized_system
+    assert "positive_evidence_ids" in normalized_system
+    assert "negative_evidence_ids" in normalized_system
+    assert "Do not invent IDs, alter IDs, or output source locators." in normalized_system
 
 
 def test_judge_prompt_does_not_instruct_forbidden_missing_data_field():
@@ -198,6 +254,16 @@ def test_judge_prompt_does_not_instruct_forbidden_missing_data_field():
         assert directive not in normalized_system
     assert "only when the role output contract includes `missing_data`" in normalized_system
     assert "describe material gaps inside allowed fields" in normalized_system
+
+
+def test_runtime_prompts_limit_missing_data_to_required_canonical_metrics():
+    system = build_system_prompt("JudgeAgent", "fallback scope")
+    normalized_system = " ".join(system.split())
+
+    assert "`expected_metrics.required`" in normalized_system
+    assert "`cap_if_missing=true`" in normalized_system
+    assert "same `period_role`" in normalized_system
+    assert "presentation-only gaps" in normalized_system
 
 
 def test_missing_skill_target_fails_before_llm_call(tmp_path: Path, monkeypatch):

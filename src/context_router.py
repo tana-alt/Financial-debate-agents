@@ -14,7 +14,7 @@ from typing import Any, Mapping
 
 from pydantic import BaseModel, Field
 
-from src.expected_metrics import expected_metric_context
+from src.expected_metrics import canonical_metric_period_context, expected_metric_context
 from src.workflow_models import (
     AgentRole,
     ContextBudget,
@@ -279,6 +279,7 @@ class ContextRouter:
 
         sections_by_topic = self._sections_by_topic(request.document_sections)
         metrics_json = request.financial_metrics.model_dump(mode="json", exclude_none=True)
+        canonical_periods = canonical_metric_period_context(request.financial_metrics)
         financial_source_ids = [
             source_ref.source_id
             for source_ref in source_refs_from_financial_metrics(request.financial_metrics)
@@ -337,6 +338,7 @@ class ContextRouter:
         guidance_inputs = self._guidance_inputs(
             request,
             metrics_json,
+            canonical_periods,
             guidance_sections,
             guidance_assumptions_sections,
         )
@@ -380,7 +382,10 @@ class ContextRouter:
                 {
                     "run_spec": self._run_spec(request),
                     "expected_metrics": expected_metric_context(AgentRole.MANAGEMENT_INTENT),
-                    "financial_snapshot_minimal": self._minimal_snapshot(metrics_json),
+                    "financial_snapshot_minimal": self._minimal_snapshot(
+                        metrics_json,
+                        canonical_periods,
+                    ),
                     "management_sections": management_sections,
                     "management_intent_sections": management_intent_sections,
                     "strategy_sections": strategy_sections,
@@ -421,7 +426,10 @@ class ContextRouter:
                 {
                     "run_spec": self._run_spec(request),
                     "expected_metrics": expected_metric_context(AgentRole.BULL),
-                    "financial_snapshot_summary": self._minimal_snapshot(metrics_json),
+                    "financial_snapshot_summary": self._minimal_snapshot(
+                        metrics_json,
+                        canonical_periods,
+                    ),
                 },
                 [],
             ),
@@ -429,7 +437,10 @@ class ContextRouter:
                 {
                     "run_spec": self._run_spec(request),
                     "expected_metrics": expected_metric_context(AgentRole.BEAR),
-                    "financial_snapshot_summary": self._minimal_snapshot(metrics_json),
+                    "financial_snapshot_summary": self._minimal_snapshot(
+                        metrics_json,
+                        canonical_periods,
+                    ),
                 },
                 [],
             ),
@@ -437,7 +448,10 @@ class ContextRouter:
                 {
                     "run_spec": self._run_spec(request),
                     "expected_metrics": expected_metric_context(AgentRole.JUDGE),
-                    "financial_snapshot_summary": self._minimal_snapshot(metrics_json),
+                    "financial_snapshot_summary": self._minimal_snapshot(
+                        metrics_json,
+                        canonical_periods,
+                    ),
                 },
                 [],
             ),
@@ -598,8 +612,12 @@ class ContextRouter:
             "not_investment_advice": True,
         }
 
-    def _minimal_snapshot(self, metrics_json: Mapping[str, Any]) -> dict[str, Any]:
-        return {
+    def _minimal_snapshot(
+        self,
+        metrics_json: Mapping[str, Any],
+        canonical_periods: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        snapshot = {
             key: metrics_json.get(key)
             for key in (
                 "ticker",
@@ -616,11 +634,15 @@ class ContextRouter:
             )
             if key in metrics_json
         }
+        if canonical_periods is not None:
+            snapshot["canonical_metric_periods"] = canonical_periods
+        return snapshot
 
     def _guidance_inputs(
         self,
         request: NormalizedReviewRequest,
         metrics_json: Mapping[str, Any],
+        canonical_periods: Mapping[str, Any],
         guidance_sections: list[dict[str, Any]],
         guidance_assumptions_sections: list[dict[str, Any]],
     ) -> dict[str, Any]:
@@ -678,6 +700,7 @@ class ContextRouter:
             "company_guidance": company_guidance,
             "consensus_estimates": consensus_estimates,
             "guidance_deltas": [],
+            "canonical_metric_periods": canonical_periods,
             "presentation_sections": [
                 section
                 for section in guidance_sections

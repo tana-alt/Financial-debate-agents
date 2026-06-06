@@ -9,12 +9,15 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
+from .report_quality_numeric_grounding import ungrounded_material_claims
 from .workflow_models import (
     REQUIRED_FINDING_COVERAGE_KEYS,
     AgentResult,
     AgentRole,
     AgentTeam,
     AnalysisBrief,
+    AvailabilityItem,
+    AvailabilityStatus,
     CashFlowRiskFinding,
     DocumentSection,
     EarningsQualityFinding,
@@ -83,6 +86,35 @@ INVESTMENT_ADVICE_PATTERNS = (
     re.compile(r"売買推奨|投資推奨|買い推奨|売り推奨|購入を推奨"),
     re.compile(r"買うべき|売るべき|保有すべき"),
 )
+INVESTMENT_ADVICE_TEXT_SKIP_KEYS = {
+    "agent_name",
+    "as_of_date",
+    "document_id",
+    "evidence_id",
+    "is_investment_advice",
+    "line_end",
+    "line_range",
+    "line_start",
+    "metric",
+    "metric_name",
+    "page",
+    "period_role",
+    "provider",
+    "provider_column_date",
+    "provider_row_date",
+    "purpose",
+    "reported_period",
+    "section_id",
+    "source_id",
+    "source_manifest",
+    "source_ref",
+    "source_refs",
+    "source_type",
+    "title",
+    "unit",
+    "url",
+}
+INVESTMENT_ADVICE_REDACTION = "[removed investment-advice language]"
 
 
 class WorkflowValidationGate:
@@ -140,6 +172,48 @@ class WorkflowValidationGate:
         self.validate_evidence_sources([*positive, *negative], allowed_source_ids)
         positive = self.canonicalize_evidence_sources(positive, canonical_sources)
         negative = self.canonicalize_evidence_sources(negative, canonical_sources)
+        (
+            positive,
+            positive_quality_warnings,
+            removed_positive_evidence_ids,
+        ) = self.degrade_ungrounded_material_evidence(
+            positive,
+            "positive_evidence_pool",
+        )
+        (
+            negative,
+            negative_quality_warnings,
+            removed_negative_evidence_ids,
+        ) = self.degrade_ungrounded_material_evidence(
+            negative,
+            "negative_evidence_pool",
+        )
+        removed_evidence_ids = removed_positive_evidence_ids | removed_negative_evidence_ids
+        if removed_evidence_ids:
+            financial_results = [
+                self.filter_agent_result_evidence(result, removed_evidence_ids)
+                for result in financial_results
+            ]
+            presentation_results = [
+                self.filter_agent_result_evidence(result, removed_evidence_ids)
+                for result in presentation_results
+            ]
+            earnings_quality_finding = self.filter_finding_evidence(
+                earnings_quality_finding,
+                removed_evidence_ids,
+            )
+            cash_flow_risk_finding = self.filter_finding_evidence(
+                cash_flow_risk_finding,
+                removed_evidence_ids,
+            )
+            management_intent_finding = self.filter_finding_evidence(
+                management_intent_finding,
+                removed_evidence_ids,
+            )
+            guidance_finding = self.filter_finding_evidence(
+                guidance_finding,
+                removed_evidence_ids,
+            )
         risks = [item for item in negative if EvidencePolarity.NEGATIVE == item.polarity]
 
         synthesis = " ".join(
@@ -163,8 +237,112 @@ class WorkflowValidationGate:
             positive_evidence_pool=positive[:30],
             negative_evidence_pool=negative[:30],
             risk_evidence_pool=risks[:30],
+            quality_warnings=[
+                *positive_quality_warnings,
+                *negative_quality_warnings,
+            ][:100],
             synthesis=synthesis[:2000],
         )
+
+    def degrade_ungrounded_material_evidence(
+        self,
+        items: list[EvidenceItem],
+        pool_name: str,
+    ) -> tuple[list[EvidenceItem], list[AvailabilityItem], set[str]]:
+        ungrounded = ungrounded_material_claims(items)
+        if not ungrounded:
+            return items, [], set()
+
+        ungrounded_ids = {item.evidence_id for item in ungrounded}
+        grounded = [item for item in items if item.evidence_id not in ungrounded_ids]
+        will_filter = bool(grounded)
+        warnings = [
+            self.numeric_grounding_warning(item, pool_name, filtered=will_filter)
+            for item in ungrounded
+        ]
+        if not will_filter:
+            return items, warnings, set()
+        return grounded, warnings, ungrounded_ids
+
+    def numeric_grounding_warning(
+        self,
+        item: EvidenceItem,
+        pool_name: str,
+        *,
+        filtered: bool,
+    ) -> AvailabilityItem:
+        action = (
+            "removed from Judge candidate pool because grounded alternatives remained"
+            if filtered
+            else "kept because removing it would empty the polarity evidence pool"
+        )
+        return AvailabilityItem(
+            key=f"llm_numeric_grounding:{item.evidence_id}",
+            status=AvailabilityStatus.AMBIGUOUS,
+            reason=(
+                f"{pool_name}.{item.evidence_id} made a material claim without numeric "
+                f"grounding or an explicit missing-data caveat; {action}."
+            ),
+            source_type=item.source_ref.source_type,
+            blocks_verdict=False,
+        )
+
+    def filter_finding_evidence(self, finding: ModelT, removed_evidence_ids: set[str]) -> ModelT:
+        updates: dict[str, list[EvidenceItem]] = {}
+        for field_name in ("key_evidence", "counter_evidence"):
+            items = list(getattr(finding, field_name, []) or [])
+            filtered = [item for item in items if item.evidence_id not in removed_evidence_ids]
+            if len(filtered) != len(items):
+                updates[field_name] = filtered or [
+                    self.filtered_evidence_placeholder(finding, field_name, items)
+                ]
+        if not updates:
+            return finding
+        return finding.model_copy(update=updates)
+
+    def filtered_evidence_placeholder(
+        self,
+        finding: BaseModel,
+        field_name: str,
+        removed_items: list[EvidenceItem],
+    ) -> EvidenceItem:
+        source = removed_items[0]
+        role_name = self.extract_role_name(finding)
+        return EvidenceItem(
+            evidence_id=self.slug(f"quality_warning:{role_name}:{field_name}:{source.evidence_id}")[
+                :80
+            ],
+            polarity=source.polarity,
+            summary=(
+                "LLM evidence was removed from the candidate pool because numeric "
+                "grounding was not directly verified."
+            ),
+            detail=(
+                "The original material claim was not promoted as canonical evidence; "
+                "see data_quality_flags for the degraded evidence warning."
+            ),
+            impact_areas=source.impact_areas,
+            source_ref=source.source_ref,
+            metric_name=source.metric_name,
+            value=source.value,
+            unit=source.unit,
+            confidence=min(source.confidence, 0.1),
+        )
+
+    def filter_agent_result_evidence(
+        self,
+        result: AgentResult,
+        removed_evidence_ids: set[str],
+    ) -> AgentResult:
+        updates: dict[str, list[EvidenceItem]] = {}
+        for field_name in ("key_evidence", "counter_evidence"):
+            items = list(getattr(result, field_name, []) or [])
+            filtered = [item for item in items if item.evidence_id not in removed_evidence_ids]
+            if len(filtered) != len(items):
+                updates[field_name] = filtered
+        if not updates:
+            return result
+        return result.model_copy(update=updates)
 
     def validate_judge_decision(
         self,
@@ -333,6 +511,26 @@ class WorkflowValidationGate:
             validated.append(canonical)
         return self.dedupe_evidence(validated)
 
+    def validated_evidence_ids(
+        self,
+        evidence_ids: list[str],
+        allowed_by_id: dict[str, EvidenceItem],
+        field_name: str,
+    ) -> list[EvidenceItem]:
+        if not evidence_ids:
+            raise WorkflowValidationError(f"{field_name} must not be empty")
+
+        validated: list[EvidenceItem] = []
+        for evidence_id in evidence_ids:
+            canonical = allowed_by_id.get(evidence_id)
+            if canonical is None:
+                raise WorkflowValidationError(
+                    f"{field_name} evidence_id {evidence_id!r} "
+                    "was not present in validated AnalysisBrief evidence"
+                )
+            validated.append(canonical)
+        return self.dedupe_evidence(validated)
+
     def validate_evidence_item_against_canonical(
         self,
         item: EvidenceItem,
@@ -357,13 +555,83 @@ class WorkflowValidationGate:
                         f"{path} contains investment-advice language: {pattern.pattern}"
                     )
 
+    def investment_advice_warnings(self, value: Any, field_name: str) -> list[AvailabilityItem]:
+        warnings: list[AvailabilityItem] = []
+        seen_paths: set[str] = set()
+        for path, text in self.iter_text_values(value, field_name):
+            if path in seen_paths:
+                continue
+            matched = next(
+                (pattern for pattern in INVESTMENT_ADVICE_PATTERNS if pattern.search(text)),
+                None,
+            )
+            if matched is None:
+                continue
+            seen_paths.add(path)
+            warnings.append(
+                AvailabilityItem(
+                    key=f"llm_investment_advice:{self.slug(path)[:135]}",
+                    status=AvailabilityStatus.REJECTED,
+                    reason=(
+                        f"{path} contained investment-advice language and was redacted before "
+                        "deterministic rendering."
+                    ),
+                    blocks_verdict=False,
+                )
+            )
+        return warnings
+
+    def sanitize_investment_advice_text(self, value: Any) -> Any:
+        sanitized, _changed = self._sanitize_investment_advice_value(value)
+        return sanitized
+
+    def _sanitize_investment_advice_value(self, value: Any) -> tuple[Any, bool]:
+        if isinstance(value, BaseModel):
+            updates: dict[str, Any] = {}
+            for field_name in type(value).model_fields:
+                if field_name in INVESTMENT_ADVICE_TEXT_SKIP_KEYS:
+                    continue
+                sanitized, changed = self._sanitize_investment_advice_value(
+                    getattr(value, field_name)
+                )
+                if changed:
+                    updates[field_name] = sanitized
+            if not updates:
+                return value, False
+            return value.model_copy(update=updates), True
+        if isinstance(value, dict):
+            updated: dict[Any, Any] = {}
+            changed = False
+            for key, nested in value.items():
+                if str(key) in INVESTMENT_ADVICE_TEXT_SKIP_KEYS:
+                    updated[key] = nested
+                    continue
+                sanitized, nested_changed = self._sanitize_investment_advice_value(nested)
+                updated[key] = sanitized
+                changed = changed or nested_changed
+            return (updated, True) if changed else (value, False)
+        if isinstance(value, list):
+            updated_items: list[Any] = []
+            changed = False
+            for nested in value:
+                sanitized, nested_changed = self._sanitize_investment_advice_value(nested)
+                updated_items.append(sanitized)
+                changed = changed or nested_changed
+            return (updated_items, True) if changed else (value, False)
+        if isinstance(value, str):
+            sanitized = value
+            for pattern in INVESTMENT_ADVICE_PATTERNS:
+                sanitized = pattern.sub(INVESTMENT_ADVICE_REDACTION, sanitized)
+            return sanitized, sanitized != value
+        return value, False
+
     def iter_text_values(self, value: Any, path: str):
         if isinstance(value, BaseModel):
             yield from self.iter_text_values(value.model_dump(mode="json"), path)
             return
         if isinstance(value, dict):
             for key, nested in value.items():
-                if key in {"agent_name", "purpose", "is_investment_advice"}:
+                if key in INVESTMENT_ADVICE_TEXT_SKIP_KEYS:
                     continue
                 yield from self.iter_text_values(nested, f"{path}.{key}")
             return

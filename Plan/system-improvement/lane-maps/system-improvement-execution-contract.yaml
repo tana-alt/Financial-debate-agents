@@ -1,0 +1,302 @@
+schema_version: "0.1"
+record_type: parallel_lane_map
+status: draft
+
+identity:
+  work_id: system-improvement-execution-contract
+  project_id: system-improvement
+  created_at: "2026-06-01"
+
+governance:
+  map_owner: agent
+  update_rule: "Update this map before assigning or changing any implementation lane. It is not a runtime lock."
+  context_budget:
+    required_source_refs_per_lane_max: 4
+    deny_broad_repo_scan: true
+
+git_scope:
+  mode: parallel
+  base_ref: origin/agent/intern-assignment-integration/product/import
+  merge_target: origin/agent/intern-assignment-integration/product/import
+  conflict_policy: no_overlap
+  sibling_branch_refs: []
+
+lanes:
+  - lane: contract-core
+    status: planned
+    owner: agent-parent
+    phase: serial-0
+    task_intent: "Freeze shared models, dry-run response, workflow error taxonomy, and response envelopes before parallel product edits."
+    source_refs:
+      - Plan/system-improvement/plans/Plan_N0008.md
+      - Plan/system-improvement/plans/Plan_N0010.md
+      - Plan/system-improvement/plans/Plan_N0011.md
+      - src/workflow_models.py
+    allowed_write_targets:
+      - src/workflow_models.py
+      - src/workflow_errors.py
+      - tests/test_workflow_models.py
+      - tests/test_contract_models.py
+    denied_context:
+      - secrets
+      - broad_repo_scan
+      - artifact_outputs
+      - unrelated_project_logs
+    expected_outputs:
+      - "Shared model and error contracts implemented with focused contract tests."
+    verification_required:
+      - uv run pytest tests/test_workflow_models.py tests/test_contract_models.py
+      - uv run python scripts/check-lane-map.py
+    branch_target: agent/system-improvement-execution-contract/contract-core/shared-contract
+    worktree_target: ../worktrees/system-improvement/system-improvement-execution-contract-contract-core
+
+  - lane: context-router
+    status: planned
+    owner: agent-parent
+    phase: serial-1
+    depends_on:
+      - contract-core
+    task_intent: "Create deterministic routed context and budget report boundaries without changing provider invocation."
+    source_refs:
+      - Plan/system-improvement/plans/Plan_N0008.md
+      - Plan/system-improvement/plans/Plan_N0011.md
+      - src/workflow.py
+      - src/workflow_models.py
+    allowed_write_targets:
+      - src/context_router.py
+      - tests/test_context_router.py
+    denied_context:
+      - secrets
+      - broad_repo_scan
+      - live_provider_logs
+      - unrelated_project_logs
+    expected_outputs:
+      - "ContextRouter contract and focused tests for source scoping and budget failure."
+    verification_required:
+      - uv run pytest tests/test_context_router.py
+      - uv run pytest tests/test_workflow_models.py
+    branch_target: agent/system-improvement-execution-contract/context-router/context-contract
+    worktree_target: ../worktrees/system-improvement/system-improvement-execution-contract-context-router
+
+  - lane: api-boundary
+    status: planned
+    owner: unassigned
+    phase: parallel-1
+    depends_on:
+      - contract-core
+    task_intent: "Expose normalized input only and stable success/error/dry-run envelopes through POST /reviews."
+    source_refs:
+      - Plan/system-improvement/plans/Plan_N0008.md
+      - Plan/system-improvement/plans/Plan_N0012.md
+      - src/api.py
+      - tests/test_api_smoke.py
+    allowed_write_targets:
+      - src/api.py
+      - tests/test_api_contract.py
+      - tests/test_api_smoke.py
+    denied_context:
+      - secrets
+      - live_provider_logs
+      - browser_sessions
+      - unrelated_project_logs
+    expected_outputs:
+      - "API contract behavior and HTTP status mapping tests."
+    verification_required:
+      - uv run pytest tests/test_api_contract.py tests/test_api_smoke.py
+    branch_target: agent/system-improvement-execution-contract/api-boundary/api-contract
+    worktree_target: ../worktrees/system-improvement/system-improvement-execution-contract-api-boundary
+
+  - lane: cli-ingestion
+    status: planned
+    owner: unassigned
+    phase: parallel-1
+    depends_on:
+      - contract-core
+    task_intent: "Move raw file and SEC filing URL acquisition to CLI/local ingestion and emit normalized input."
+    source_refs:
+      - Plan/system-improvement/plans/Plan_N0008.md
+      - Plan/system-improvement/plans/Plan_N0012.md
+      - src/main.py
+      - src/preprocessor.py
+    allowed_write_targets:
+      - src/main.py
+      - src/preprocessor.py
+      - tests/test_cli_smoke.py
+      - tests/test_preprocessor.py
+    denied_context:
+      - secrets
+      - broad_repo_scan
+      - live_sec_fetch_without_mock
+      - unrelated_project_logs
+    expected_outputs:
+      - "CLI ingestion creates normalized input and keeps raw acquisition out of API mode."
+    verification_required:
+      - uv run pytest tests/test_cli_smoke.py tests/test_preprocessor.py
+    branch_target: agent/system-improvement-execution-contract/cli-ingestion/normalized-input
+    worktree_target: ../worktrees/system-improvement/system-improvement-execution-contract-cli-ingestion
+
+  - lane: prompt-cleanup
+    status: planned
+    owner: unassigned
+    phase: parallel-1
+    depends_on:
+      - contract-core
+    task_intent: "Align runtime prompts with the frozen schema and remove documentation-only prompt sections from provider calls."
+    source_refs:
+      - Plan/system-improvement/plans/Plan_N0009.md
+      - Plan/system-improvement/plans/Plan_N0010.md
+      - src/prompt_loader.py
+      - src/prompts/README.md
+    allowed_write_targets:
+      - src/prompts/
+      - src/prompt_loader.py
+      - tests/test_agent_assets.py
+    denied_context:
+      - secrets
+      - broad_repo_scan
+      - live_provider_logs
+      - unrelated_project_logs
+    expected_outputs:
+      - "Prompt/schema parity tests pass and runtime prompts omit pseudo output models."
+    verification_required:
+      - uv run pytest tests/test_agent_assets.py
+    branch_target: agent/system-improvement-execution-contract/prompt-cleanup/runtime-prompts
+    worktree_target: ../worktrees/system-improvement/system-improvement-execution-contract-prompt-cleanup
+
+  - lane: agent-structured
+    status: planned
+    owner: unassigned
+    phase: parallel-1
+    depends_on:
+      - contract-core
+    task_intent: "Split invocation, parsing, repair policy, and provider-native structured output fallback behavior."
+    source_refs:
+      - Plan/system-improvement/plans/Plan_N0008.md
+      - Plan/system-improvement/plans/Plan_N0009.md
+      - src/workflow_agents.py
+      - src/structured.py
+    allowed_write_targets:
+      - src/workflow_agents.py
+      - src/structured.py
+      - src/llm.py
+      - tests/test_workflow_agents.py
+      - tests/test_llm_provider.py
+    denied_context:
+      - secrets
+      - live_provider_logs
+      - broad_repo_scan
+      - unrelated_project_logs
+    expected_outputs:
+      - "Structured parser, retry policy, and provider error mapping tests."
+    verification_required:
+      - uv run pytest tests/test_workflow_agents.py tests/test_llm_provider.py
+    branch_target: agent/system-improvement-execution-contract/agent-structured/structured-output
+    worktree_target: ../worktrees/system-improvement/system-improvement-execution-contract-agent-structured
+
+  - lane: evidence-quality
+    status: planned
+    owner: unassigned
+    phase: parallel-1
+    depends_on:
+      - contract-core
+    task_intent: "Separate evidence aggregation and deterministic quality gates from final judgment."
+    source_refs:
+      - Plan/system-improvement/plans/Plan_N0008.md
+      - Plan/system-improvement/plans/Plan_N0010.md
+      - src/workflow_validation.py
+      - tests/test_report_quality_full.py
+    allowed_write_targets:
+      - src/workflow_validation.py
+      - src/report_quality_contracts.py
+      - src/report_quality_evidence_matrix.py
+      - src/report_quality_external_research.py
+      - src/report_quality_guidance.py
+      - src/report_quality_missing_data.py
+      - src/report_quality_numeric_grounding.py
+      - src/report_quality_source_inventory.py
+      - src/report_quality_source_timing.py
+      - tests/test_report_quality_full.py
+      - tests/test_safety_guards.py
+    denied_context:
+      - secrets
+      - live_provider_logs
+      - broad_repo_scan
+      - unrelated_project_logs
+    expected_outputs:
+      - "Evidence and quality gate tests for source validity, numeric grounding, and no-advice safety."
+    verification_required:
+      - uv run pytest tests/test_report_quality_full.py tests/test_safety_guards.py
+    branch_target: agent/system-improvement-execution-contract/evidence-quality/quality-gates
+    worktree_target: ../worktrees/system-improvement/system-improvement-execution-contract-evidence-quality
+
+  - lane: renderer-report
+    status: planned
+    owner: unassigned
+    phase: parallel-1
+    depends_on:
+      - contract-core
+    task_intent: "Render deterministic report sections from validated matrix objects and update the README example."
+    source_refs:
+      - Plan/system-improvement/plans/Plan_N0009.md
+      - Plan/system-improvement/plans/Plan_N0010.md
+      - README.md
+      - src/workflow.py
+    allowed_write_targets:
+      - src/report_renderer.py
+      - tests/test_report_renderer.py
+      - README.md
+    denied_context:
+      - secrets
+      - live_provider_logs
+      - broad_repo_scan
+      - unrelated_project_logs
+    expected_outputs:
+      - "Renderer contract tests and README report example aligned to the final section order."
+    verification_required:
+      - uv run pytest tests/test_report_renderer.py
+      - rg -n "Judge Rationale|Evidence Matrix|Quality Gates" README.md
+    branch_target: agent/system-improvement-execution-contract/renderer-report/report-contract
+    worktree_target: ../worktrees/system-improvement/system-improvement-execution-contract-renderer-report
+
+  - lane: integration-runner
+    status: planned
+    owner: agent-parent
+    phase: serial-2
+    depends_on:
+      - context-router
+      - api-boundary
+      - cli-ingestion
+      - prompt-cleanup
+      - agent-structured
+      - evidence-quality
+      - renderer-report
+    task_intent: "Wire the refactored boundaries into ReviewWorkflow and run fake-provider end-to-end checks."
+    source_refs:
+      - Plan/system-improvement/plans/Plan_N0012.md
+      - src/workflow.py
+      - src/workflow_runtime.py
+      - tests/test_workflow_e2e.py
+    allowed_write_targets:
+      - src/workflow.py
+      - src/workflow_runtime.py
+      - tests/test_workflow_api.py
+      - tests/test_workflow_e2e.py
+    denied_context:
+      - secrets
+      - live_provider_logs
+      - broad_repo_scan
+      - unrelated_project_logs
+    expected_outputs:
+      - "Integrated fake-provider success and representative failure paths."
+    verification_required:
+      - uv run pytest tests/test_workflow_api.py tests/test_workflow_e2e.py
+      - uv run pytest
+    branch_target: agent/system-improvement-execution-contract/integration-runner/workflow-wiring
+    worktree_target: ../worktrees/system-improvement/system-improvement-execution-contract-integration-runner
+
+handoff:
+  evidence_required:
+    - source_refs
+    - changed_paths
+    - verification_results
+  next_action: review

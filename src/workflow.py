@@ -15,11 +15,14 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .context_router import ContextRouter
-from .expected_metrics import canonical_metric_availability, with_canonical_metric_availability
+from .expected_metrics import (
+    canonical_metric_availability,
+    canonical_metric_period_context,
+    with_canonical_metric_availability,
+)
 from .llm import LLMProvider
 from .report_quality_guidance import validate_guidance_required
 from .report_quality_missing_data import apply_confidence_caps
-from .report_quality_numeric_grounding import validate_numeric_grounding
 from .report_renderer import ReportRenderer
 from .workflow_agents import (
     CashFlowRiskAnalyst,
@@ -28,10 +31,13 @@ from .workflow_agents import (
     ManagementIntentAnalyst,
 )
 from .workflow_models import (
+    AgentExecutionTrace,
     AgentRole,
     AnalysisBrief,
     AvailabilityItem,
     AvailabilityStatus,
+    BearCase,
+    BullCase,
     ClaimRecord,
     ClaimType,
     DebateResult,
@@ -124,6 +130,8 @@ class MarkdownRenderer:
         brief: AnalysisBrief,
         debate: DebateResult,
         decision: JudgeDecision,
+        bull_case: BullCase | None = None,
+        bear_case: BearCase | None = None,
     ) -> str:
         matrix = self.build_report_matrix(
             request=request,
@@ -137,6 +145,8 @@ class MarkdownRenderer:
             debate=debate,
             decision=decision,
             matrix=matrix,
+            bull_case=bull_case,
+            bear_case=bear_case,
         )
 
     def build_report_matrix(
@@ -158,7 +168,7 @@ class MarkdownRenderer:
             ),
             decision_uses=self._decision_uses(evidence_items, decision),
             missing_data_items=self._missing_data_items(brief),
-            data_quality_flags=self._data_quality_flags(request),
+            data_quality_flags=self._data_quality_flags(request, brief),
         )
 
     def _matrix_evidence_items(
@@ -273,7 +283,11 @@ class MarkdownRenderer:
     def _missing_data_items(self, brief: AnalysisBrief) -> list[MissingDataItem]:
         return []
 
-    def _data_quality_flags(self, request: ReviewRequest) -> list[AvailabilityItem]:
+    def _data_quality_flags(
+        self,
+        request: ReviewRequest,
+        brief: AnalysisBrief,
+    ) -> list[AvailabilityItem]:
         metrics = request.financial_metrics
         profile = metrics.input_profile if metrics is not None else request.input_profile
         items = [
@@ -303,7 +317,8 @@ class MarkdownRenderer:
                 source_type=SourceType.FINANCIAL_API,
             )
         )
-        return items
+        items.extend(brief.quality_warnings)
+        return items[:200]
 
     def confidence_cap_items(self, request: ReviewRequest) -> list[MissingDataItem]:
         metrics = request.financial_metrics
@@ -376,6 +391,8 @@ class ReviewWorkflow:
 
     def run(self, request: ReviewRequest) -> ReviewResponse:
         steps: list[StepStatus] = []
+        quality_warnings: list[AvailabilityItem] = []
+        agent_traces: list[AgentExecutionTrace] = []
 
         metrics, sections = self._record_step(
             steps,
@@ -388,17 +405,37 @@ class ReviewWorkflow:
         financial_findings = self._record_step(
             steps,
             WorkflowStep.FINANCIAL_AGENTS,
-            lambda: self.agent_runtime.run_parallel(self.financial_agent_classes, context),
+            lambda: self.agent_runtime.run_parallel(
+                self.financial_agent_classes,
+                context,
+                trace_sink=agent_traces,
+            ),
         )
-        self.validator.validate_no_investment_advice_text(financial_findings, "financial_findings")
+        financial_advice_warnings = self.validator.investment_advice_warnings(
+            financial_findings,
+            "financial_findings",
+        )
+        if financial_advice_warnings:
+            quality_warnings.extend(financial_advice_warnings)
+            financial_findings = self.validator.sanitize_investment_advice_text(financial_findings)
         presentation_findings = self._record_step(
             steps,
             WorkflowStep.PRESENTATION_AGENTS,
-            lambda: self.agent_runtime.run_parallel(self.presentation_agent_classes, context),
+            lambda: self.agent_runtime.run_parallel(
+                self.presentation_agent_classes,
+                context,
+                trace_sink=agent_traces,
+            ),
         )
-        self.validator.validate_no_investment_advice_text(
-            presentation_findings, "presentation_findings"
+        presentation_advice_warnings = self.validator.investment_advice_warnings(
+            presentation_findings,
+            "presentation_findings",
         )
+        if presentation_advice_warnings:
+            quality_warnings.extend(presentation_advice_warnings)
+            presentation_findings = self.validator.sanitize_investment_advice_text(
+                presentation_findings
+            )
 
         brief = self._record_step(
             steps,
@@ -411,25 +448,43 @@ class ReviewWorkflow:
                 presentation_findings,
             ),
         )
+        brief = self._with_quality_warnings(brief, quality_warnings)
 
-        bull_case, bear_case, debate = self._record_step(
+        bull_case, bear_case, debate, debate_quality_warnings = self._record_step(
             steps,
             WorkflowStep.DEBATE,
-            lambda: self.debate_runner.run(runtime_request, metrics, brief),
+            lambda: self.debate_runner.run(
+                runtime_request,
+                metrics,
+                brief,
+                trace_sink=agent_traces,
+            ),
         )
+        if debate_quality_warnings:
+            quality_warnings.extend(debate_quality_warnings)
+            brief = self._with_quality_warnings(brief, quality_warnings)
 
-        decision = self._record_step(
+        decision, judge_quality_warnings = self._record_step(
             steps,
             WorkflowStep.JUDGE,
-            lambda: self.judge_runner.run(runtime_request, metrics, brief, bull_case, bear_case),
+            lambda: self.judge_runner.run(
+                runtime_request,
+                metrics,
+                brief,
+                bull_case,
+                bear_case,
+                trace_sink=agent_traces,
+            ),
         )
+        if judge_quality_warnings:
+            quality_warnings.extend(judge_quality_warnings)
+            brief = self._with_quality_warnings(brief, quality_warnings)
         decision = self.validator.validate_judge_decision(decision, brief)
         decision = apply_confidence_caps(
             decision,
             brief,
             missing_data_items=self.renderer.confidence_cap_items(runtime_request),
         )
-        validate_numeric_grounding([*decision.positive_evidence, *decision.negative_evidence])
 
         markdown = self._record_step(
             steps,
@@ -440,18 +495,28 @@ class ReviewWorkflow:
                     brief=brief,
                     debate=debate,
                     decision=decision,
+                    bull_case=bull_case,
+                    bear_case=bear_case,
                 )
                 if runtime_request.include_markdown
                 else "Markdown rendering was disabled for this request."
             ),
         )
-        self.validator.validate_no_investment_advice_text(markdown, "markdown_report")
+        markdown_advice_warnings = self.validator.investment_advice_warnings(
+            markdown,
+            "markdown_report",
+        )
+        if markdown_advice_warnings:
+            quality_warnings.extend(markdown_advice_warnings)
+            brief = self._with_quality_warnings(brief, quality_warnings)
+            markdown = self.validator.sanitize_investment_advice_text(markdown)
 
         return ReviewResponse(
             request_id=runtime_request.request_id,
             ticker=runtime_request.ticker,
             fiscal_period=runtime_request.fiscal_period,
             steps=steps,
+            agent_traces=agent_traces,
             financial_metrics=metrics,
             analysis_brief=brief,
             bull_case=bull_case,
@@ -460,6 +525,18 @@ class ReviewWorkflow:
             judge_decision=decision,
             markdown_report=markdown,
         )
+
+    def _with_quality_warnings(
+        self,
+        brief: AnalysisBrief,
+        warnings: list[AvailabilityItem],
+    ) -> AnalysisBrief:
+        if not warnings:
+            return brief
+        by_key = {item.key: item for item in brief.quality_warnings}
+        for warning in warnings:
+            by_key.setdefault(warning.key, warning)
+        return brief.model_copy(update={"quality_warnings": list(by_key.values())[:100]})
 
     def _record_step(self, steps: list[StepStatus], step: WorkflowStep, fn):
         started_at = datetime.now(timezone.utc)
@@ -570,8 +647,26 @@ class ReviewWorkflow:
             segment_metrics=list(metrics.segment_metrics),
             unmapped_metrics=list(metrics.unmapped_metrics),
         )
+        canonical_metrics = self._merge_metric_values(
+            inferred.canonical_metrics,
+            metrics.canonical_metrics,
+        )
+        derived_metrics = self._merge_metric_values(
+            inferred.derived_metrics,
+            metrics.derived_metrics,
+        )
         return inferred.model_copy(
             update={
+                "source_refs": self._metric_value_source_refs(
+                    inferred.model_copy(
+                        update={
+                            "canonical_metrics": canonical_metrics,
+                            "derived_metrics": derived_metrics,
+                        }
+                    )
+                ),
+                "canonical_metrics": canonical_metrics,
+                "derived_metrics": derived_metrics,
                 "currency": metrics.currency,
                 "guidance_metrics": metrics.guidance_metrics,
                 "guidance_deltas": metrics.guidance_deltas,
@@ -579,6 +674,17 @@ class ReviewWorkflow:
                 "metric_conflicts": metrics.metric_conflicts,
             },
         )
+
+    def _merge_metric_values(self, inferred: list[Any], existing: list[Any]) -> list[Any]:
+        merged = list(inferred)
+        seen = {(metric.metric_name, metric.period_role, metric.fiscal_period) for metric in merged}
+        for metric in existing:
+            key = (metric.metric_name, metric.period_role, metric.fiscal_period)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(metric)
+        return merged
 
     def _metric_value_source_refs(self, metrics: FinancialMetrics) -> list[SourceRef]:
         refs: list[SourceRef] = []
@@ -642,6 +748,7 @@ class ReviewWorkflow:
         ]
         by_topic = self._sections_by_topic(sections)
         metrics_json = metrics.model_dump(mode="json", exclude_none=True)
+        canonical_periods = canonical_metric_period_context(metrics)
         minimal_snapshot = {
             key: metrics_json.get(key)
             for key in (
@@ -658,6 +765,7 @@ class ReviewWorkflow:
                 "guidance",
             )
         }
+        minimal_snapshot["canonical_metric_periods"] = canonical_periods
 
         return {
             "run_spec": run_spec,
@@ -672,7 +780,11 @@ class ReviewWorkflow:
             "earnings_quality_metrics": metrics_json,
             "cash_flow_risk_metrics": metrics_json,
             "cash_conversion_inputs": metrics_json,
-            "guidance_metrics": self._guidance_inputs(metrics_json, by_topic["guidance"]),
+            "guidance_metrics": self._guidance_inputs(
+                metrics_json,
+                by_topic["guidance"],
+                canonical_periods,
+            ),
             "guidance_consensus_deltas": [],
             "consensus_deltas": [],
             "earnings_quality_sections": (
@@ -763,6 +875,7 @@ class ReviewWorkflow:
         self,
         metrics_json: Mapping[str, Any],
         guidance_sections: list[dict[str, Any]],
+        canonical_periods: Mapping[str, Any],
     ) -> dict[str, Any]:
         company_guidance = []
         if metrics_json.get("guidance"):
@@ -790,6 +903,7 @@ class ReviewWorkflow:
             "company_guidance": company_guidance,
             "consensus_estimates": consensus_estimates,
             "guidance_deltas": [],
+            "canonical_metric_periods": canonical_periods,
             "presentation_sections": guidance_sections,
             "sec_sections": [],
             "availability": metrics_json.get("availability", []),

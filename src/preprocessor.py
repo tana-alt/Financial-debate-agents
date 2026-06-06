@@ -45,6 +45,9 @@ from .workflow_models import (
 log = structlog.get_logger()
 
 PROVIDER_PERIOD_END_TOLERANCE_DAYS = 15
+EARNINGS_DATE_COMPARISON_TOLERANCE_DAYS = 15
+PREVIOUS_EARNINGS_MIN_GAP_DAYS = 45
+PREVIOUS_EARNINGS_MAX_GAP_DAYS = 135
 
 
 SECTION_PATTERNS = {
@@ -59,9 +62,9 @@ SUPPORTED_DOCUMENT_FILE_SUFFIXES = {".pdf", ".txt", ".text", ".md"}
 MAX_DOCUMENT_SECTION_CHARS = 8000
 NORMALIZED_REVIEW_SCHEMA_VERSION = "normalized-review-request.v1"
 DEFAULT_CONTEXT_BUDGET = {
-    "max_input_tokens": 6000,
-    "max_output_tokens": 2000,
-    "max_total_tokens": 10000,
+    "max_input_tokens": 96_000,
+    "max_output_tokens": 16_000,
+    "max_total_tokens": 128_000,
 }
 
 
@@ -575,6 +578,90 @@ def _target_earnings_row(frame: Any, target_earnings_date: date | None) -> tuple
     return None, None
 
 
+def _target_earnings_period_rows(
+    frame: Any,
+    target_earnings_date: date | None,
+) -> dict[MetricPeriodRole, tuple[Any, date]]:
+    if frame is None or getattr(frame, "empty", True) or target_earnings_date is None:
+        return {}
+    if not hasattr(frame, "iterrows"):
+        return {}
+
+    rows: list[tuple[date, Any]] = []
+    for index, row in frame.iterrows():
+        candidate = _provider_date(index)
+        if candidate is None and hasattr(row, "get"):
+            for column in ("Earnings Date", "EarningsDate", "earnings_date"):
+                if column in row:
+                    candidate = _provider_date(row.get(column))
+                    break
+        if candidate is not None:
+            rows.append((candidate, row))
+
+    by_date = sorted(rows, key=lambda item: item[0], reverse=True)
+    current_candidates = [
+        item
+        for item in by_date
+        if abs((item[0] - target_earnings_date).days) <= EARNINGS_DATE_COMPARISON_TOLERANCE_DAYS
+        and _reported_eps_value(item[1]) is not None
+    ]
+    current = (
+        sorted(
+            current_candidates,
+            key=lambda item: (abs((item[0] - target_earnings_date).days), -item[0].toordinal()),
+        )[0]
+        if current_candidates
+        else None
+    )
+    if current is None:
+        return {}
+
+    selected: dict[MetricPeriodRole, tuple[Any, date]] = {
+        MetricPeriodRole.ACTUAL: (current[1], current[0])
+    }
+    previous = next(
+        (
+            item
+            for item in by_date
+            if PREVIOUS_EARNINGS_MIN_GAP_DAYS
+            <= (current[0] - item[0]).days
+            <= PREVIOUS_EARNINGS_MAX_GAP_DAYS
+            and _reported_eps_value(item[1]) is not None
+        ),
+        None,
+    )
+    if previous is not None:
+        selected[MetricPeriodRole.PREVIOUS_QUARTER] = (previous[1], previous[0])
+
+    year_ago_target = _shift_year(current[0], -1)
+    year_ago_candidates = [
+        item
+        for item in by_date
+        if abs((item[0] - year_ago_target).days) <= EARNINGS_DATE_COMPARISON_TOLERANCE_DAYS
+        and _reported_eps_value(item[1]) is not None
+    ]
+    if year_ago_candidates:
+        year_ago = sorted(
+            year_ago_candidates,
+            key=lambda item: abs((item[0] - year_ago_target).days),
+        )[0]
+        selected[MetricPeriodRole.YEAR_AGO_QUARTER] = (year_ago[1], year_ago[0])
+    return selected
+
+
+def _reported_eps_value(row: Any) -> float | None:
+    if not hasattr(row, "get"):
+        return None
+    return safe_float(row.get("Reported EPS"))
+
+
+def _shift_year(value: date, years: int) -> date:
+    try:
+        return value.replace(year=value.year + years)
+    except ValueError:
+        return value.replace(year=value.year + years, day=28)
+
+
 def _target_metric_value(
     frame: Any,
     canonical_key: str,
@@ -637,8 +724,11 @@ def _financial_source_ref(
     provider_column_date: date | None = None,
     period_role: MetricPeriodRole = MetricPeriodRole.ACTUAL,
 ) -> SourceRef:
+    role_part = (
+        "" if period_role is MetricPeriodRole.ACTUAL else f":{_period_role_suffix(period_role)}"
+    )
     return SourceRef(
-        source_id=f"financial_api:{ticker.upper()}:{fiscal_period}:{metric_name}",
+        source_id=f"financial_api:{ticker.upper()}:{fiscal_period}:yf{role_part}:{metric_name}",
         source_type=SourceType.FINANCIAL_API,
         metric_name=metric_name,
         title="yfinance verified-period metric",
@@ -673,6 +763,7 @@ def build_financial_metrics(
     availability: list[AvailabilityItem] | None = None,
     segment_metrics: list[NormalizedMetric] | None = None,
     unmapped_metrics: list[UnmappedMetric] | None = None,
+    period_role: MetricPeriodRole = MetricPeriodRole.ACTUAL,
 ) -> FinancialMetrics:
     """Build normalized financial metrics passed to workflow agents."""
     source_refs = source_refs
@@ -686,6 +777,7 @@ def build_financial_metrics(
                 reported_period=fiscal_period,
             )
         ]
+    source_refs = _source_refs_with_default_period_role(source_refs, period_role)
 
     if eps_surprise_pct is None:
         eps_surprise_pct = calculate_surprise_pct(eps, eps_consensus)
@@ -701,6 +793,7 @@ def build_financial_metrics(
     canonical_metrics = _canonical_metric_values(
         ticker=ticker,
         fiscal_period=fiscal_period,
+        period_role=period_role,
         values={
             "eps": eps,
             "revenue": revenue,
@@ -714,6 +807,7 @@ def build_financial_metrics(
     derived_metrics = _derived_metric_values(
         ticker=ticker,
         fiscal_period=fiscal_period,
+        period_role=period_role,
         free_cash_flow=free_cash_flow,
         source_refs=source_refs,
     )
@@ -750,11 +844,16 @@ def _canonical_metric_values(
     *,
     ticker: str,
     fiscal_period: str,
+    period_role: MetricPeriodRole,
     values: Mapping[str, float | None],
     source_refs: list[SourceRef],
 ) -> list[MetricValue]:
     metrics: list[MetricValue] = []
-    refs_by_metric = {ref.metric_name: ref for ref in source_refs if ref.metric_name}
+    refs_by_metric = {
+        (ref.metric_name, ref.period_role or MetricPeriodRole.ACTUAL): ref
+        for ref in source_refs
+        if ref.metric_name
+    }
     units = {
         "eps": "USD/share",
         "revenue": "USD",
@@ -764,17 +863,63 @@ def _canonical_metric_values(
         "operating_margin_pct": "pct",
     }
     for metric_name, value in values.items():
-        source_ref = refs_by_metric.get(metric_name)
+        source_ref = refs_by_metric.get((metric_name, period_role))
         if value is None or source_ref is None:
             continue
         metrics.append(
             MetricValue(
-                metric_id=_metric_id(ticker, fiscal_period, metric_name),
+                metric_id=_metric_id(
+                    ticker,
+                    fiscal_period,
+                    metric_name,
+                    period_role=period_role,
+                ),
                 metric_name=metric_name,
                 value=float(value),
                 unit=units.get(metric_name),
                 fiscal_period=fiscal_period,
-                period_role=MetricPeriodRole.ACTUAL,
+                period_role=period_role,
+                source_ref=source_ref,
+            )
+        )
+    return metrics
+
+
+def _historical_eps_metric_values(
+    *,
+    ticker: str,
+    fiscal_period: str,
+    historical_eps: Mapping[MetricPeriodRole, tuple[float, date]],
+    source_refs: list[SourceRef],
+) -> list[MetricValue]:
+    refs_by_role = {
+        ref.period_role: ref
+        for ref in source_refs
+        if ref.metric_name == "eps" and ref.period_role is not None
+    }
+    metrics: list[MetricValue] = []
+    for period_role in (
+        MetricPeriodRole.PREVIOUS_QUARTER,
+        MetricPeriodRole.YEAR_AGO_QUARTER,
+    ):
+        value_and_date = historical_eps.get(period_role)
+        source_ref = refs_by_role.get(period_role)
+        if value_and_date is None or source_ref is None:
+            continue
+        value, _provider_row_date = value_and_date
+        metrics.append(
+            MetricValue(
+                metric_id=_metric_id(
+                    ticker,
+                    fiscal_period,
+                    "eps",
+                    period_role=period_role,
+                ),
+                metric_name="eps",
+                value=float(value),
+                unit="USD/share",
+                fiscal_period=fiscal_period,
+                period_role=period_role,
                 source_ref=source_ref,
             )
         )
@@ -785,44 +930,93 @@ def _derived_metric_values(
     *,
     ticker: str,
     fiscal_period: str,
+    period_role: MetricPeriodRole,
     free_cash_flow: float | None,
     source_refs: list[SourceRef],
 ) -> list[DerivedMetricValue]:
-    refs_by_metric = {ref.metric_name: ref for ref in source_refs if ref.metric_name}
-    operating_ref = refs_by_metric.get("operating_cash_flow")
-    capex_ref = refs_by_metric.get("capex")
+    refs_by_metric = {
+        (ref.metric_name, ref.period_role or MetricPeriodRole.ACTUAL): ref
+        for ref in source_refs
+        if ref.metric_name
+    }
+    operating_ref = refs_by_metric.get(("operating_cash_flow", period_role))
+    capex_ref = refs_by_metric.get(("capex", period_role))
     if free_cash_flow is None or operating_ref is None or capex_ref is None:
         return []
 
     derived_ref = SourceRef(
-        source_id=_metric_id(ticker, fiscal_period, "free_cash_flow:derived"),
+        source_id=_metric_id(
+            ticker,
+            fiscal_period,
+            "free_cash_flow:derived",
+            period_role=period_role,
+        ),
         source_type=SourceType.DERIVED_METRIC,
         metric_name="free_cash_flow",
         title="Derived free cash flow",
         reported_period=fiscal_period,
-        period_role=MetricPeriodRole.ACTUAL,
+        period_role=period_role,
     )
     return [
         DerivedMetricValue(
-            metric_id=_metric_id(ticker, fiscal_period, "free_cash_flow"),
+            metric_id=_metric_id(
+                ticker,
+                fiscal_period,
+                "free_cash_flow",
+                period_role=period_role,
+            ),
             metric_name="free_cash_flow",
             value=float(free_cash_flow),
             unit="USD",
             fiscal_period=fiscal_period,
-            period_role=MetricPeriodRole.ACTUAL,
+            period_role=period_role,
             source_ref=derived_ref,
             component_metric_ids=[
-                _metric_id(ticker, fiscal_period, "operating_cash_flow"),
-                _metric_id(ticker, fiscal_period, "capex"),
+                _metric_id(
+                    ticker,
+                    fiscal_period,
+                    "operating_cash_flow",
+                    period_role=period_role,
+                ),
+                _metric_id(ticker, fiscal_period, "capex", period_role=period_role),
             ],
             component_source_refs=[operating_ref, capex_ref],
         )
     ]
 
 
-def _metric_id(ticker: str, fiscal_period: str, metric_name: str) -> str:
-    safe_metric = _slug(metric_name)
+def _metric_id(
+    ticker: str,
+    fiscal_period: str,
+    metric_name: str,
+    *,
+    period_role: MetricPeriodRole = MetricPeriodRole.ACTUAL,
+) -> str:
+    role_part = "" if period_role is MetricPeriodRole.ACTUAL else f"{period_role.value}:"
+    safe_metric = _slug(f"{role_part}{metric_name}")
     return f"metric:{ticker.upper()}:{fiscal_period}:{safe_metric}"
+
+
+def _source_refs_with_default_period_role(
+    source_refs: list[SourceRef],
+    period_role: MetricPeriodRole,
+) -> list[SourceRef]:
+    return [
+        (
+            source_ref.model_copy(update={"period_role": period_role})
+            if source_ref.metric_name is not None and source_ref.period_role is None
+            else source_ref
+        )
+        for source_ref in source_refs
+    ]
+
+
+def _period_role_suffix(period_role: MetricPeriodRole) -> str:
+    if period_role is MetricPeriodRole.PREVIOUS_QUARTER:
+        return "pq"
+    if period_role is MetricPeriodRole.YEAR_AGO_QUARTER:
+        return "ya"
+    return period_role.value
 
 
 def fetch_filing_html(url: str) -> str:
@@ -927,9 +1121,11 @@ def fetch_consensus(
     free_cash_flow = None
     source_refs: list[SourceRef] = []
     availability: list[AvailabilityItem] = []
+    historical_eps: dict[MetricPeriodRole, tuple[float, date]] = {}
     try:
         earnings_dates = t.earnings_dates
-        row, provider_row_date = _target_earnings_row(earnings_dates, target_earnings_date)
+        earnings_rows = _target_earnings_period_rows(earnings_dates, target_earnings_date)
+        row, provider_row_date = earnings_rows.get(MetricPeriodRole.ACTUAL, (None, None))
         if row is not None:
             eps_actual = safe_float(row.get("Reported EPS"))
             eps_consensus = safe_float(row.get("EPS Estimate"))
@@ -951,6 +1147,42 @@ def fetch_consensus(
                         metric_name="eps_consensus",
                         provider_row_date=provider_row_date,
                         period_role=MetricPeriodRole.CONSENSUS,
+                    )
+                )
+            for period_role in (
+                MetricPeriodRole.PREVIOUS_QUARTER,
+                MetricPeriodRole.YEAR_AGO_QUARTER,
+            ):
+                period_row, period_row_date = earnings_rows.get(period_role, (None, None))
+                period_eps = (
+                    safe_float(period_row.get("Reported EPS")) if period_row is not None else None
+                )
+                if period_eps is None:
+                    availability.append(
+                        _availability(
+                            f"yfinance:{period_role.value}:eps",
+                            AvailabilityStatus.PERIOD_UNVERIFIED,
+                            f"No yfinance EPS row matched {period_role.value}.",
+                        )
+                    )
+                    continue
+                if period_row_date is None:
+                    availability.append(
+                        _availability(
+                            f"yfinance:{period_role.value}:eps",
+                            AvailabilityStatus.PERIOD_UNVERIFIED,
+                            f"No yfinance EPS row date matched {period_role.value}.",
+                        )
+                    )
+                    continue
+                historical_eps[period_role] = (period_eps, period_row_date)
+                source_refs.append(
+                    _financial_source_ref(
+                        ticker=ticker,
+                        fiscal_period=fiscal_period,
+                        metric_name="eps",
+                        provider_row_date=period_row_date,
+                        period_role=period_role,
                     )
                 )
         elif target_earnings_date is None:
@@ -1082,7 +1314,7 @@ def fetch_consensus(
             )
         )
 
-    return build_financial_metrics(
+    metrics = build_financial_metrics(
         ticker=ticker,
         fiscal_period=fiscal_period,
         target_earnings_date=target_earnings_date,
@@ -1098,6 +1330,17 @@ def fetch_consensus(
         free_cash_flow=free_cash_flow,
         source_refs=source_refs,
         availability=availability,
+    )
+    extra_eps_metrics = _historical_eps_metric_values(
+        ticker=ticker,
+        fiscal_period=fiscal_period,
+        historical_eps=historical_eps,
+        source_refs=metrics.source_refs,
+    )
+    if not extra_eps_metrics:
+        return metrics
+    return metrics.model_copy(
+        update={"canonical_metrics": [*metrics.canonical_metrics, *extra_eps_metrics]}
     )
 
 
@@ -1154,10 +1397,14 @@ def _merge_financial_metric_sources(
     sec_p0_metrics = {"revenue", "operating_cash_flow", "capex"}
 
     yfinance_refs_by_metric = {
-        ref.metric_name: ref for ref in yfinance_metrics.source_refs if ref.metric_name
+        (ref.metric_name, ref.period_role): ref
+        for ref in yfinance_metrics.source_refs
+        if ref.metric_name and ref.period_role
     }
     sec_refs_by_metric = {
-        ref.metric_name: ref for ref in sec_metrics.source_refs if ref.metric_name
+        (ref.metric_name, ref.period_role): ref
+        for ref in sec_metrics.source_refs
+        if ref.metric_name and ref.period_role
     }
 
     for metric_name in ("revenue", "operating_cash_flow", "capex"):
@@ -1165,8 +1412,9 @@ def _merge_financial_metric_sources(
         sec_value = getattr(sec_metrics, metric_name)
         if sec_value is not None:
             updates[metric_name] = sec_value
-            if sec_refs_by_metric.get(metric_name) is not None:
-                selected_refs.append(sec_refs_by_metric[metric_name])
+            sec_ref = sec_refs_by_metric.get((metric_name, MetricPeriodRole.ACTUAL))
+            if sec_ref is not None:
+                selected_refs.append(sec_ref)
             if yfinance_value is not None and _metric_conflicts(
                 metric_name,
                 float(yfinance_value),
@@ -1185,22 +1433,27 @@ def _merge_financial_metric_sources(
                 )
         elif yfinance_value is not None:
             updates[metric_name] = yfinance_value
-            if yfinance_refs_by_metric.get(metric_name) is not None:
-                selected_refs.append(yfinance_refs_by_metric[metric_name])
+            yfinance_ref = yfinance_refs_by_metric.get((metric_name, MetricPeriodRole.ACTUAL))
+            if yfinance_ref is not None:
+                selected_refs.append(yfinance_ref)
 
     for metric_name in ("eps", "eps_consensus", "revenue_consensus"):
         value = getattr(yfinance_metrics, metric_name)
         if value is not None:
             updates[metric_name] = value
-            if yfinance_refs_by_metric.get(metric_name) is not None:
-                selected_refs.append(yfinance_refs_by_metric[metric_name])
+            yfinance_ref = yfinance_refs_by_metric.get((metric_name, MetricPeriodRole.ACTUAL))
+            if yfinance_ref is not None:
+                selected_refs.append(yfinance_ref)
 
     if yfinance_metrics.guidance is not None:
         updates["guidance"] = yfinance_metrics.guidance
     if yfinance_metrics.operating_margin_pct is not None:
         updates["operating_margin_pct"] = yfinance_metrics.operating_margin_pct
-        if yfinance_refs_by_metric.get("operating_margin_pct") is not None:
-            selected_refs.append(yfinance_refs_by_metric["operating_margin_pct"])
+        yfinance_ref = yfinance_refs_by_metric.get(
+            ("operating_margin_pct", MetricPeriodRole.ACTUAL)
+        )
+        if yfinance_ref is not None:
+            selected_refs.append(yfinance_ref)
 
     sec_fcf_components_available = (
         sec_metrics.operating_cash_flow is not None and sec_metrics.capex is not None
@@ -1228,7 +1481,7 @@ def _merge_financial_metric_sources(
         ),
         *conflict_items,
     ]
-    return build_financial_metrics(
+    merged = build_financial_metrics(
         ticker=yfinance_metrics.ticker,
         fiscal_period=yfinance_metrics.fiscal_period,
         target_earnings_date=yfinance_metrics.target_earnings_date,
@@ -1240,6 +1493,31 @@ def _merge_financial_metric_sources(
         segment_metrics=[*yfinance_metrics.segment_metrics, *sec_metrics.segment_metrics],
         unmapped_metrics=[*yfinance_metrics.unmapped_metrics, *sec_metrics.unmapped_metrics],
         **updates,
+    )
+    historical_canonical = [
+        *[
+            metric
+            for metric in yfinance_metrics.canonical_metrics
+            if metric.period_role is not MetricPeriodRole.ACTUAL
+        ],
+        *[
+            metric
+            for metric in sec_metrics.canonical_metrics
+            if metric.period_role is not MetricPeriodRole.ACTUAL
+        ],
+    ]
+    historical_derived = [
+        metric
+        for metric in sec_metrics.derived_metrics
+        if metric.period_role is not MetricPeriodRole.ACTUAL
+    ]
+    if not historical_canonical and not historical_derived:
+        return merged
+    return merged.model_copy(
+        update={
+            "canonical_metrics": [*merged.canonical_metrics, *historical_canonical],
+            "derived_metrics": [*merged.derived_metrics, *historical_derived],
+        }
     )
 
 

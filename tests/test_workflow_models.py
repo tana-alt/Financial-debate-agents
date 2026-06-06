@@ -46,6 +46,7 @@ from src.workflow_models import (
     ReviewRequest,
     ReviewResponse,
     ReviewStatus,
+    ReviewSuccessResponse,
     SourceManifestEntry,
     SourceRef,
     SourceType,
@@ -564,6 +565,88 @@ def test_full_review_response_contains_structured_result_and_markdown():
     assert response.ticker == "NVDA"
     assert response.markdown_report.startswith("# Earnings Review")
     assert response.is_investment_advice is False
+
+
+def test_review_responses_accept_source_forward_markdown_report():
+    positive = evidence()
+    negative = evidence("ev:negative:capex", EvidencePolarity.NEGATIVE)
+    status = completed_status(WorkflowStep.JUDGE)
+    brief = analysis_brief(positive=positive, negative=negative)
+    debate = DebateResult(
+        bull_case="Bull case.",
+        bear_case="Bear case.",
+        risk_case="Risk case.",
+        evaluation="Evaluation.",
+        strongest_positive_evidence=[positive],
+        strongest_negative_evidence=[negative],
+    )
+    decision = JudgeDecision(
+        verdict="good",
+        confidence=0.72,
+        summary="Good quarter.",
+        rationale="EPS evidence outweighed FCF risk.",
+        positive_evidence=[positive],
+        negative_evidence=[negative],
+        eps_outlook="EPS can rise.",
+        eps_outlook_reason="EPS evidence is positive.",
+        fcf_outlook="FCF can improve.",
+        fcf_outlook_reason="FCF risk is manageable.",
+    )
+    bull = BullCase(
+        thesis="EPS quality supports a good interpretation.",
+        stance_strength="moderate",
+        strongest_positive_evidence=[positive],
+        eps_bull_argument="EPS can improve.",
+        fcf_bull_argument="FCF can improve.",
+        conditions_needed=["Demand remains durable."],
+        weak_points=["Near-term FCF remains pressured."],
+        finding_coverage=complete_finding_coverage(),
+        confidence=0.7,
+    )
+    bear = BearCase(
+        thesis="FCF risk remains.",
+        stance_strength="moderate",
+        strongest_negative_evidence=[negative],
+        eps_bear_argument="EPS durability could fade.",
+        fcf_bear_argument="FCF may stay pressured.",
+        failure_modes=["CapEx remains elevated."],
+        counter_to_bull_case=["Demand could slow."],
+        finding_coverage=complete_finding_coverage(),
+        confidence=0.65,
+    )
+    markdown = "# Earnings Review\n\n" + ("Source-backed report row.\n" * 3_000)
+    response = ReviewResponse(
+        request_id="req-long-report",
+        ticker="NVDA",
+        fiscal_period="2025Q3",
+        steps=[status],
+        analysis_brief=brief,
+        bull_case=bull,
+        bear_case=bear,
+        debate_result=debate,
+        judge_decision=decision,
+        markdown_report=markdown,
+    )
+    matrix = ReportMatrix(
+        source_manifest=source_manifest(),
+        evidence_items=[positive, negative],
+    )
+
+    success = ReviewSuccessResponse(
+        request_id=response.request_id,
+        ticker=response.ticker,
+        fiscal_period=response.fiscal_period,
+        steps=response.steps,
+        analysis_brief=response.analysis_brief,
+        claim_matrix=matrix,
+        bull_case=response.bull_case,
+        bear_case=response.bear_case,
+        debate_result=response.debate_result,
+        judge_decision=response.judge_decision,
+        markdown_report=response.markdown_report,
+    )
+
+    assert len(success.markdown_report) > 20_000
 
 
 def source_manifest() -> list[SourceManifestEntry]:

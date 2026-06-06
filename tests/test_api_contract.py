@@ -28,41 +28,11 @@ def normalized_review_payload(*, dry_run: bool = True) -> dict[str, object]:
             "revenue_surprise_pct": 6.1,
             "operating_cash_flow": 13_100_000_000,
             "capex": -1_100_000_000,
+            "free_cash_flow": 12_000_000_000,
             "guidance": "Management guidance implies continued revenue growth.",
-            "source_refs": [
-                {
-                    "source_id": "financial_api:NVDA:2025Q3:yfinance:eps",
-                    "source_type": "financial_api",
-                    "metric_name": "eps",
-                    "provider": "yfinance",
-                    "reported_period": "2025Q3",
-                    "period_role": "actual",
-                },
-                {
-                    "source_id": "financial_api:NVDA:2025Q3:sec:revenue",
-                    "source_type": "financial_api",
-                    "metric_name": "revenue",
-                    "provider": "sec_company_facts",
-                    "reported_period": "2025Q3",
-                    "period_role": "actual",
-                },
-                {
-                    "source_id": "financial_api:NVDA:2025Q3:sec:operating_cash_flow",
-                    "source_type": "financial_api",
-                    "metric_name": "operating_cash_flow",
-                    "provider": "sec_company_facts",
-                    "reported_period": "2025Q3",
-                    "period_role": "actual",
-                },
-                {
-                    "source_id": "financial_api:NVDA:2025Q3:sec:capex",
-                    "source_type": "financial_api",
-                    "metric_name": "capex",
-                    "provider": "sec_company_facts",
-                    "reported_period": "2025Q3",
-                    "period_role": "actual",
-                },
-            ],
+            "source_refs": _financial_metric_source_refs(),
+            "canonical_metrics": _canonical_metric_values(),
+            "derived_metrics": _derived_metric_values(),
         },
         "document_sections": [
             {
@@ -85,42 +55,7 @@ def normalized_review_payload(*, dry_run: bool = True) -> dict[str, object]:
             },
         ],
         "source_manifest": [
-            {
-                "source_id": "financial_api:NVDA:2025Q3:yfinance:eps",
-                "source_type": "financial_api",
-                "title": "EPS API metric",
-                "metric_name": "eps",
-                "provider": "yfinance",
-                "reported_period": "2025Q3",
-                "period_role": "actual",
-            },
-            {
-                "source_id": "financial_api:NVDA:2025Q3:sec:revenue",
-                "source_type": "financial_api",
-                "title": "Revenue SEC metric",
-                "metric_name": "revenue",
-                "provider": "sec_company_facts",
-                "reported_period": "2025Q3",
-                "period_role": "actual",
-            },
-            {
-                "source_id": "financial_api:NVDA:2025Q3:sec:operating_cash_flow",
-                "source_type": "financial_api",
-                "title": "Operating cash flow SEC metric",
-                "metric_name": "operating_cash_flow",
-                "provider": "sec_company_facts",
-                "reported_period": "2025Q3",
-                "period_role": "actual",
-            },
-            {
-                "source_id": "financial_api:NVDA:2025Q3:sec:capex",
-                "source_type": "financial_api",
-                "title": "CapEx SEC metric",
-                "metric_name": "capex",
-                "provider": "sec_company_facts",
-                "reported_period": "2025Q3",
-                "period_role": "actual",
-            },
+            *_financial_metric_manifest_entries(),
             _manifest_entry("eps"),
             _manifest_entry("guidance"),
             _manifest_entry("risk"),
@@ -135,6 +70,130 @@ def normalized_review_payload(*, dry_run: bool = True) -> dict[str, object]:
         "is_investment_advice": False,
         "dry_run": dry_run,
     }
+
+
+REQUIRED_CANONICAL_PERIOD_ROLES = ("actual", "previous_quarter", "year_ago_quarter")
+
+
+def _period_values(period_role: str) -> dict[str, float]:
+    values_by_role = {
+        "actual": {
+            "eps": 0.81,
+            "revenue": 35_000_000_000,
+            "operating_cash_flow": 13_100_000_000,
+            "capex": -1_100_000_000,
+            "free_cash_flow": 12_000_000_000,
+        },
+        "previous_quarter": {
+            "eps": 0.76,
+            "revenue": 32_500_000_000,
+            "operating_cash_flow": 12_200_000_000,
+            "capex": -1_000_000_000,
+            "free_cash_flow": 11_200_000_000,
+        },
+        "year_ago_quarter": {
+            "eps": 0.68,
+            "revenue": 26_900_000_000,
+            "operating_cash_flow": 10_000_000_000,
+            "capex": -900_000_000,
+            "free_cash_flow": 9_100_000_000,
+        },
+    }
+    return values_by_role[period_role]
+
+
+def _metric_id(metric_name: str, period_role: str) -> str:
+    if period_role == "actual":
+        return f"metric:NVDA:2025Q3:{metric_name}"
+    return f"metric:NVDA:2025Q3:{period_role}:{metric_name}"
+
+
+def _financial_metric_source_ref(metric_name: str, period_role: str) -> dict[str, object]:
+    provider = "yfinance" if metric_name == "eps" else "sec_company_facts"
+    provider_slug = "yfinance" if provider == "yfinance" else "sec"
+    role_part = "" if period_role == "actual" else f":{period_role}"
+    return {
+        "source_id": f"financial_api:NVDA:2025Q3:{provider_slug}{role_part}:{metric_name}",
+        "source_type": "financial_api",
+        "title": f"{metric_name} {period_role} canonical metric",
+        "metric_name": metric_name,
+        "provider": provider,
+        "reported_period": "2025Q3",
+        "period_role": period_role,
+    }
+
+
+def _derived_metric_source_ref(period_role: str) -> dict[str, object]:
+    return {
+        "source_id": f"{_metric_id('free_cash_flow', period_role)}:derived",
+        "source_type": "derived_metric",
+        "title": f"free_cash_flow {period_role} derived metric",
+        "metric_name": "free_cash_flow",
+        "reported_period": "2025Q3",
+        "period_role": period_role,
+    }
+
+
+def _financial_metric_source_refs() -> list[dict[str, object]]:
+    refs: list[dict[str, object]] = []
+    for period_role in REQUIRED_CANONICAL_PERIOD_ROLES:
+        refs.extend(
+            _financial_metric_source_ref(metric_name, period_role)
+            for metric_name in ("eps", "revenue", "operating_cash_flow", "capex")
+        )
+        refs.append(_derived_metric_source_ref(period_role))
+    return refs
+
+
+def _financial_metric_manifest_entries() -> list[dict[str, object]]:
+    return [dict(ref) for ref in _financial_metric_source_refs()]
+
+
+def _canonical_metric_values() -> list[dict[str, object]]:
+    metrics: list[dict[str, object]] = []
+    for period_role in REQUIRED_CANONICAL_PERIOD_ROLES:
+        for metric_name in ("eps", "revenue", "operating_cash_flow", "capex"):
+            source_ref: dict[str, object] = _financial_metric_source_ref(
+                metric_name,
+                period_role,
+            )
+            metrics.append(
+                {
+                    "metric_id": _metric_id(metric_name, period_role),
+                    "metric_name": metric_name,
+                    "value": _period_values(period_role)[metric_name],
+                    "unit": "USD/share" if metric_name == "eps" else "USD",
+                    "fiscal_period": "2025Q3",
+                    "period_role": period_role,
+                    "source_ref": source_ref,
+                }
+            )
+    return metrics
+
+
+def _derived_metric_values() -> list[dict[str, object]]:
+    metrics = []
+    for period_role in REQUIRED_CANONICAL_PERIOD_ROLES:
+        metrics.append(
+            {
+                "metric_id": _metric_id("free_cash_flow", period_role),
+                "metric_name": "free_cash_flow",
+                "value": _period_values(period_role)["free_cash_flow"],
+                "unit": "USD",
+                "fiscal_period": "2025Q3",
+                "period_role": period_role,
+                "source_ref": _derived_metric_source_ref(period_role),
+                "component_metric_ids": [
+                    _metric_id("operating_cash_flow", period_role),
+                    _metric_id("capex", period_role),
+                ],
+                "component_source_refs": [
+                    _financial_metric_source_ref("operating_cash_flow", period_role),
+                    _financial_metric_source_ref("capex", period_role),
+                ],
+            }
+        )
+    return metrics
 
 
 def _source_ref(section_id: str) -> dict[str, object]:

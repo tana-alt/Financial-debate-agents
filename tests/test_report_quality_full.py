@@ -157,6 +157,35 @@ def test_numeric_grounding_rejects_period_numbers_without_metric_value(monkeypat
         validate_numeric_grounding([item])
 
 
+def test_numeric_grounding_degrade_keeps_only_polarity_evidence_with_warning():
+    validator = WorkflowValidationGate()
+    item = EvidenceItem(
+        evidence_id="only-ungrounded",
+        polarity=EvidencePolarity.POSITIVE,
+        summary="Revenue growth was strong.",
+        detail="Revenue growth was strong.",
+        impact_areas=[ImpactArea.OVERALL],
+        source_ref=SourceRef(
+            source_id="filing:revenue",
+            source_type=SourceType.FILING,
+            document_id="10q",
+            section_id="revenue",
+            title="Revenue section",
+        ),
+        confidence=0.7,
+    )
+
+    filtered, warnings, removed_ids = validator.degrade_ungrounded_material_evidence(
+        [item],
+        "positive_evidence_pool",
+    )
+
+    assert filtered == [item]
+    assert removed_ids == set()
+    assert [warning.key for warning in warnings] == ["llm_numeric_grounding:only-ungrounded"]
+    assert "kept because removing it would empty" in warnings[0].reason
+
+
 def test_source_validity_rejects_reused_source_id_with_different_locator():
     validator = WorkflowValidationGate()
     canonical = SourceRef(

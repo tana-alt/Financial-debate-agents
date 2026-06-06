@@ -22,13 +22,27 @@ The core questions are:
 - Do not use unstated background knowledge.
 - Do not calculate financial metrics from raw values.
 - Use only precomputed metrics supplied by the Python workflow.
-- If a required metric is missing, use `missing_data` only when the role output
-  contract includes `missing_data`; otherwise describe material gaps inside
-  allowed fields and lower `confidence`.
+- Treat a metric as missing only when it appears in routed
+  `expected_metrics.required` with `cap_if_missing=true` and the corresponding
+  canonical or derived value is absent for the same `period_role`.
+- Use `missing_data` only when the role output contract includes
+  `missing_data`; otherwise describe required canonical gaps inside allowed
+  fields and lower `confidence`.
+- Optional, reference-only, not-in-contract, presentation, transcript, news,
+  and analyst-report gaps or conflicts must not populate `missing_data` and
+  must not lower `confidence`.
+- If routed company-authored text such as an earnings presentation, filing, or
+  shareholder letter explicitly acknowledges a material uncertainty or
+  contingency relevant to your assigned role, discount that role's `confidence`
+  and explain it inside allowed output fields. Do not treat absent forecasts or
+  undisclosed data as this kind of acknowledged uncertainty.
 - Do not output Markdown, prose outside JSON, or hidden reasoning.
 - Do not make a final `good | neutral | bad` verdict unless the prompt is
   `JudgeAgent`.
 - Do not generate the final Markdown report. Reporting is deterministic Python.
+- Write natural-language JSON field values in Japanese. Keep JSON schema keys,
+  enum values, evidence_id values, source_id values, metric names, ticker
+  symbols, and exact units unchanged.
 
 ## Banned Output Topics
 

@@ -77,6 +77,18 @@ def has_numeric_grounding(item) -> bool:
     return False
 
 
+def is_ungrounded_material_claim(item) -> bool:
+    """Return True when an evidence item makes a material claim without grounding."""
+
+    return claim_requires_grounding(item) and not has_numeric_grounding(item)
+
+
+def ungrounded_material_claims(items: Iterable) -> list:
+    """Collect material evidence items that lack numeric grounding."""
+
+    return [item for item in items if is_ungrounded_material_claim(item)]
+
+
 def validate_numeric_grounding(items: Iterable) -> None:
     if os.getenv("EARNINGS_DEBATE_REQUIRE_NUMERIC_GROUNDING", "1").strip().lower() in {
         "0",
@@ -85,9 +97,8 @@ def validate_numeric_grounding(items: Iterable) -> None:
     }:
         return
     failures = []
-    for item in items:
-        if claim_requires_grounding(item) and not has_numeric_grounding(item):
-            failures.append(getattr(item, "evidence_id", getattr(item, "summary", "unknown")))
+    for item in ungrounded_material_claims(items):
+        failures.append(getattr(item, "evidence_id", getattr(item, "summary", "unknown")))
     if failures:
         raise NumericGroundingError(
             "Material claims require numeric grounding or an explicit missing-data caveat: "

@@ -189,6 +189,7 @@ def _success_response(request: ReviewRequest, result: ReviewResponse) -> ReviewS
         ticker=result.ticker,
         fiscal_period=result.fiscal_period,
         steps=result.steps,
+        agent_traces=result.agent_traces,
         analysis_brief=result.analysis_brief,
         claim_matrix=claim_matrix,
         bull_case=result.bull_case,
@@ -196,13 +197,15 @@ def _success_response(request: ReviewRequest, result: ReviewResponse) -> ReviewS
         debate_result=result.debate_result,
         judge_decision=result.judge_decision,
         decision_uses=claim_matrix.decision_uses,
-        quality_gate_result=_quality_gate_result(claim_matrix),
+        quality_gate_result=_quality_gate_result(claim_matrix, result.agent_traces),
         markdown_report=result.markdown_report,
         disclaimer=result.disclaimer,
     )
 
 
-def _quality_gate_result(claim_matrix: Any) -> dict[str, Any]:
+def _quality_gate_result(
+    claim_matrix: Any, agent_traces: list[Any] | None = None
+) -> dict[str, Any]:
     return {
         "status": "passed",
         "source_manifest_entries": len(claim_matrix.source_manifest),
@@ -210,6 +213,10 @@ def _quality_gate_result(claim_matrix: Any) -> dict[str, Any]:
         "claim_records": len(claim_matrix.claim_records),
         "decision_uses": len(claim_matrix.decision_uses),
         "missing_data_items": len(claim_matrix.missing_data_items),
+        "agent_traces": [
+            trace.model_dump(mode="json") if hasattr(trace, "model_dump") else trace
+            for trace in (agent_traces or [])
+        ],
     }
 
 

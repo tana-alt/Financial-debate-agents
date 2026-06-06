@@ -12,6 +12,8 @@ from .workflow_models import (
     AvailabilityStatus,
     FinancialMetrics,
     MetricPeriodRole,
+    MetricValue,
+    SourceRef,
     SourceType,
 )
 
@@ -58,101 +60,140 @@ class ExpectedMetricSpec:
         }
 
 
+REQUIRED_CANONICAL_PERIOD_ROLES = (
+    MetricPeriodRole.ACTUAL,
+    MetricPeriodRole.PREVIOUS_QUARTER,
+    MetricPeriodRole.YEAR_AGO_QUARTER,
+)
+REQUIRED_CANONICAL_METRIC_KEYS = (
+    "revenue",
+    "eps",
+    "operating_cash_flow",
+    "capex",
+    "free_cash_flow",
+)
+
+
+def _period_description(period_role: MetricPeriodRole) -> str:
+    if period_role is MetricPeriodRole.ACTUAL:
+        return "Current-period"
+    if period_role is MetricPeriodRole.PREVIOUS_QUARTER:
+        return "Previous-quarter"
+    if period_role is MetricPeriodRole.YEAR_AGO_QUARTER:
+        return "Year-ago-quarter"
+    return period_role.value
+
+
+def _required_canonical_metrics() -> tuple[ExpectedMetricSpec, ...]:
+    specs: list[ExpectedMetricSpec] = []
+    for period_role in REQUIRED_CANONICAL_PERIOD_ROLES:
+        period_text = _period_description(period_role)
+        specs.extend(
+            [
+                ExpectedMetricSpec(
+                    metric_key="revenue",
+                    roles=(
+                        AgentRole.EARNINGS_QUALITY,
+                        AgentRole.MANAGEMENT_INTENT,
+                        AgentRole.GUIDANCE,
+                        AgentRole.BULL,
+                        AgentRole.BEAR,
+                        AgentRole.JUDGE,
+                    ),
+                    requirement=MetricRequirement.REQUIRED,
+                    source_policy=MetricSourcePolicy.CANONICAL,
+                    preferred_sources=("sec_company_facts",),
+                    period_role=period_role,
+                    cap_if_missing=True,
+                    sec_tags=(
+                        "Revenues",
+                        "SalesRevenueNet",
+                        "RevenueFromContractWithCustomerExcludingAssessedTax",
+                        "RevenueFromContractWithCustomerIncludingAssessedTax",
+                    ),
+                    description=f"{period_text} revenue.",
+                ),
+                ExpectedMetricSpec(
+                    metric_key="eps",
+                    roles=(
+                        AgentRole.EARNINGS_QUALITY,
+                        AgentRole.GUIDANCE,
+                        AgentRole.BULL,
+                        AgentRole.BEAR,
+                        AgentRole.JUDGE,
+                    ),
+                    requirement=MetricRequirement.REQUIRED,
+                    source_policy=MetricSourcePolicy.CANONICAL,
+                    preferred_sources=("yfinance",),
+                    period_role=period_role,
+                    cap_if_missing=True,
+                    sec_tags=("EarningsPerShareDiluted", "EarningsPerShareBasic"),
+                    description=(
+                        f"{period_text} actual EPS. SEC GAAP EPS requires basis "
+                        "metadata before reconciliation."
+                    ),
+                ),
+                ExpectedMetricSpec(
+                    metric_key="operating_cash_flow",
+                    roles=(
+                        AgentRole.CASH_FLOW_RISK,
+                        AgentRole.MANAGEMENT_INTENT,
+                        AgentRole.BULL,
+                        AgentRole.BEAR,
+                        AgentRole.JUDGE,
+                    ),
+                    requirement=MetricRequirement.REQUIRED,
+                    source_policy=MetricSourcePolicy.CANONICAL,
+                    preferred_sources=("sec_company_facts",),
+                    period_role=period_role,
+                    cap_if_missing=True,
+                    sec_tags=("NetCashProvidedByUsedInOperatingActivities",),
+                    description=f"{period_text} operating cash flow.",
+                ),
+                ExpectedMetricSpec(
+                    metric_key="capex",
+                    roles=(
+                        AgentRole.CASH_FLOW_RISK,
+                        AgentRole.MANAGEMENT_INTENT,
+                        AgentRole.BULL,
+                        AgentRole.BEAR,
+                        AgentRole.JUDGE,
+                    ),
+                    requirement=MetricRequirement.REQUIRED,
+                    source_policy=MetricSourcePolicy.CANONICAL,
+                    preferred_sources=("sec_company_facts",),
+                    period_role=period_role,
+                    cap_if_missing=True,
+                    sec_tags=(
+                        "PaymentsToAcquirePropertyPlantAndEquipment",
+                        "PaymentsToAcquireProductiveAssets",
+                    ),
+                    description=f"{period_text} capital expenditures, normalized as an outflow.",
+                ),
+                ExpectedMetricSpec(
+                    metric_key="free_cash_flow",
+                    roles=(
+                        AgentRole.CASH_FLOW_RISK,
+                        AgentRole.MANAGEMENT_INTENT,
+                        AgentRole.BULL,
+                        AgentRole.BEAR,
+                        AgentRole.JUDGE,
+                    ),
+                    requirement=MetricRequirement.REQUIRED,
+                    source_policy=MetricSourcePolicy.DERIVED,
+                    preferred_sources=("derived_from_operating_cash_flow_and_capex",),
+                    period_role=period_role,
+                    cap_if_missing=True,
+                    source_type=SourceType.DERIVED_METRIC,
+                    description=f"{period_text} FCF derived as OCF minus absolute CapEx.",
+                ),
+            ]
+        )
+    return tuple(specs)
+
+
 EXPECTED_METRICS: tuple[ExpectedMetricSpec, ...] = (
-    ExpectedMetricSpec(
-        metric_key="revenue",
-        roles=(
-            AgentRole.EARNINGS_QUALITY,
-            AgentRole.MANAGEMENT_INTENT,
-            AgentRole.GUIDANCE,
-            AgentRole.BULL,
-            AgentRole.BEAR,
-            AgentRole.JUDGE,
-        ),
-        requirement=MetricRequirement.REQUIRED,
-        source_policy=MetricSourcePolicy.CANONICAL,
-        preferred_sources=("sec_company_facts",),
-        period_role=MetricPeriodRole.ACTUAL,
-        cap_if_missing=True,
-        sec_tags=(
-            "Revenues",
-            "SalesRevenueNet",
-            "RevenueFromContractWithCustomerExcludingAssessedTax",
-            "RevenueFromContractWithCustomerIncludingAssessedTax",
-        ),
-        description="Current-period revenue used for earnings quality and summary context.",
-    ),
-    ExpectedMetricSpec(
-        metric_key="eps",
-        roles=(
-            AgentRole.EARNINGS_QUALITY,
-            AgentRole.GUIDANCE,
-            AgentRole.BULL,
-            AgentRole.BEAR,
-            AgentRole.JUDGE,
-        ),
-        requirement=MetricRequirement.REQUIRED,
-        source_policy=MetricSourcePolicy.CANONICAL,
-        preferred_sources=("yfinance",),
-        period_role=MetricPeriodRole.ACTUAL,
-        cap_if_missing=True,
-        sec_tags=("EarningsPerShareDiluted", "EarningsPerShareBasic"),
-        description="Actual EPS. SEC GAAP EPS requires basis metadata before reconciliation.",
-    ),
-    ExpectedMetricSpec(
-        metric_key="operating_cash_flow",
-        roles=(
-            AgentRole.CASH_FLOW_RISK,
-            AgentRole.MANAGEMENT_INTENT,
-            AgentRole.BULL,
-            AgentRole.BEAR,
-            AgentRole.JUDGE,
-        ),
-        requirement=MetricRequirement.REQUIRED,
-        source_policy=MetricSourcePolicy.CANONICAL,
-        preferred_sources=("sec_company_facts",),
-        period_role=MetricPeriodRole.ACTUAL,
-        cap_if_missing=True,
-        sec_tags=("NetCashProvidedByUsedInOperatingActivities",),
-        description="Current-period operating cash flow.",
-    ),
-    ExpectedMetricSpec(
-        metric_key="capex",
-        roles=(
-            AgentRole.CASH_FLOW_RISK,
-            AgentRole.MANAGEMENT_INTENT,
-            AgentRole.BULL,
-            AgentRole.BEAR,
-            AgentRole.JUDGE,
-        ),
-        requirement=MetricRequirement.REQUIRED,
-        source_policy=MetricSourcePolicy.CANONICAL,
-        preferred_sources=("sec_company_facts",),
-        period_role=MetricPeriodRole.ACTUAL,
-        cap_if_missing=True,
-        sec_tags=(
-            "PaymentsToAcquirePropertyPlantAndEquipment",
-            "PaymentsToAcquireProductiveAssets",
-        ),
-        description="Current-period capital expenditures, normalized as an outflow.",
-    ),
-    ExpectedMetricSpec(
-        metric_key="free_cash_flow",
-        roles=(
-            AgentRole.CASH_FLOW_RISK,
-            AgentRole.MANAGEMENT_INTENT,
-            AgentRole.BULL,
-            AgentRole.BEAR,
-            AgentRole.JUDGE,
-        ),
-        requirement=MetricRequirement.REQUIRED,
-        source_policy=MetricSourcePolicy.DERIVED,
-        preferred_sources=("derived_from_operating_cash_flow_and_capex",),
-        period_role=MetricPeriodRole.ACTUAL,
-        cap_if_missing=True,
-        source_type=SourceType.DERIVED_METRIC,
-        description="Derived as operating cash flow minus absolute capex.",
-    ),
+    *_required_canonical_metrics(),
     ExpectedMetricSpec(
         metric_key="revenue_consensus",
         roles=(AgentRole.EARNINGS_QUALITY, AgentRole.GUIDANCE),
@@ -208,48 +249,6 @@ EXPECTED_METRICS: tuple[ExpectedMetricSpec, ...] = (
         source_type=SourceType.EARNINGS_CALL,
         description="Transcript metrics are not part of the current canonical input contract.",
     ),
-    ExpectedMetricSpec(
-        metric_key="prior_period_metrics",
-        roles=(
-            AgentRole.EARNINGS_QUALITY,
-            AgentRole.CASH_FLOW_RISK,
-            AgentRole.MANAGEMENT_INTENT,
-            AgentRole.GUIDANCE,
-            AgentRole.BULL,
-            AgentRole.BEAR,
-            AgentRole.JUDGE,
-        ),
-        requirement=MetricRequirement.NOT_IN_CONTRACT,
-        source_policy=MetricSourcePolicy.CANONICAL,
-        preferred_sources=("sec_company_facts", "yfinance"),
-        period_role=MetricPeriodRole.PRIOR_PERIOD,
-        source_type=SourceType.FINANCIAL_API,
-        description=(
-            "Previous-quarter metrics are not fetched by the current P0 contract; "
-            "agents may report them as a follow-up data need but must not treat them as missing."
-        ),
-    ),
-    ExpectedMetricSpec(
-        metric_key="year_ago_period_metrics",
-        roles=(
-            AgentRole.EARNINGS_QUALITY,
-            AgentRole.CASH_FLOW_RISK,
-            AgentRole.MANAGEMENT_INTENT,
-            AgentRole.GUIDANCE,
-            AgentRole.BULL,
-            AgentRole.BEAR,
-            AgentRole.JUDGE,
-        ),
-        requirement=MetricRequirement.NOT_IN_CONTRACT,
-        source_policy=MetricSourcePolicy.CANONICAL,
-        preferred_sources=("sec_company_facts", "yfinance"),
-        period_role=MetricPeriodRole.PRIOR_PERIOD,
-        source_type=SourceType.FINANCIAL_API,
-        description=(
-            "Year-ago comparable quarter metrics are not fetched by the current P0 contract; "
-            "agents may report them as a follow-up data need but must not treat them as missing."
-        ),
-    ),
 )
 
 
@@ -270,23 +269,25 @@ def expected_metric_context(role: AgentRole) -> dict[str, Any]:
 
 def canonical_metric_availability(metrics: FinancialMetrics) -> list[AvailabilityItem]:
     items: list[AvailabilityItem] = []
-    seen: set[str] = set()
+    seen: set[tuple[str, MetricPeriodRole]] = set()
     for spec in EXPECTED_METRICS:
+        spec_key = (spec.metric_key, spec.period_role)
         if (
-            spec.metric_key in seen
+            spec_key in seen
             or spec.requirement is not MetricRequirement.REQUIRED
             or spec.source_policy is MetricSourcePolicy.PRESENTATION_REFERENCE
             or not spec.cap_if_missing
         ):
             continue
-        seen.add(spec.metric_key)
+        seen.add(spec_key)
+        availability_key = _availability_key(spec)
         if not _canonical_metric_is_available(metrics, spec):
             items.append(
                 AvailabilityItem(
-                    key=spec.metric_key,
+                    key=availability_key,
                     status=AvailabilityStatus.REQUIRED_MISSING,
                     reason=(
-                        f"Required canonical metric {spec.metric_key} was not available "
+                        f"Required canonical metric {availability_key} was not available "
                         "from accepted SEC/yfinance/derived source refs."
                     ),
                     source_type=spec.source_type,
@@ -296,9 +297,9 @@ def canonical_metric_availability(metrics: FinancialMetrics) -> list[Availabilit
         else:
             items.append(
                 AvailabilityItem(
-                    key=spec.metric_key,
+                    key=availability_key,
                     status=AvailabilityStatus.AVAILABLE,
-                    reason=f"Required canonical metric {spec.metric_key} is available.",
+                    reason=f"Required canonical metric {availability_key} is available.",
                     source_type=spec.source_type,
                 )
             )
@@ -306,12 +307,43 @@ def canonical_metric_availability(metrics: FinancialMetrics) -> list[Availabilit
 
 
 def _canonical_metric_is_available(metrics: FinancialMetrics, spec: ExpectedMetricSpec) -> bool:
-    value = getattr(metrics, spec.metric_key, None)
-    if value is None:
+    if not _metric_value_present(metrics, spec):
         return False
     if spec.source_policy is MetricSourcePolicy.DERIVED:
         return _has_accepted_derived_metric(metrics, spec)
     return _has_accepted_source_ref(metrics, spec)
+
+
+def _availability_key(spec: ExpectedMetricSpec) -> str:
+    if spec.period_role is MetricPeriodRole.ACTUAL:
+        return spec.metric_key
+    return f"{spec.period_role.value}:{spec.metric_key}"
+
+
+def _metric_value_present(metrics: FinancialMetrics, spec: ExpectedMetricSpec) -> bool:
+    if spec.source_policy is MetricSourcePolicy.DERIVED:
+        if any(
+            metric.metric_name == spec.metric_key
+            and metric.period_role == spec.period_role
+            and metric.fiscal_period == metrics.fiscal_period
+            for metric in metrics.derived_metrics
+        ):
+            return True
+        return (
+            spec.period_role is MetricPeriodRole.ACTUAL
+            and getattr(metrics, spec.metric_key, None) is not None
+        )
+    if any(
+        metric.metric_name == spec.metric_key
+        and metric.period_role == spec.period_role
+        and metric.fiscal_period == metrics.fiscal_period
+        for metric in metrics.canonical_metrics
+    ):
+        return True
+    return (
+        spec.period_role is MetricPeriodRole.ACTUAL
+        and getattr(metrics, spec.metric_key, None) is not None
+    )
 
 
 def _has_accepted_source_ref(metrics: FinancialMetrics, spec: ExpectedMetricSpec) -> bool:
@@ -337,6 +369,7 @@ def _has_accepted_derived_metric(metrics: FinancialMetrics, spec: ExpectedMetric
         for component in EXPECTED_METRICS
         if component.metric_key in {"operating_cash_flow", "capex"}
         and component.requirement is MetricRequirement.REQUIRED
+        and component.period_role is spec.period_role
     }
     for metric in metrics.derived_metrics:
         if (
@@ -360,8 +393,12 @@ def _has_accepted_derived_metric(metrics: FinancialMetrics, spec: ExpectedMetric
             for component_key, component_spec in component_specs.items()
         ):
             return True
-    source_refs_by_metric = {ref.metric_name: ref for ref in metrics.source_refs if ref.metric_name}
-    derived_ref = source_refs_by_metric.get(spec.metric_key)
+    source_refs_by_metric = {
+        (ref.metric_name, ref.period_role): ref
+        for ref in metrics.source_refs
+        if ref.metric_name and ref.period_role
+    }
+    derived_ref = source_refs_by_metric.get((spec.metric_key, spec.period_role))
     if derived_ref is None or derived_ref.source_type is not SourceType.DERIVED_METRIC:
         return False
     if derived_ref.period_role is not spec.period_role:
@@ -369,9 +406,9 @@ def _has_accepted_derived_metric(metrics: FinancialMetrics, spec: ExpectedMetric
     if derived_ref.reported_period != metrics.fiscal_period:
         return False
     return all(
-        component_key in source_refs_by_metric
+        (component_key, spec.period_role) in source_refs_by_metric
         and _source_ref_satisfies(
-            source_refs_by_metric[component_key],
+            source_refs_by_metric[(component_key, spec.period_role)],
             component_spec,
             metrics.fiscal_period,
         )
@@ -401,3 +438,110 @@ def with_canonical_metric_availability(metrics: FinancialMetrics) -> FinancialMe
         if item.key not in canonical_keys or item.status is AvailabilityStatus.CONFLICTING
     ]
     return metrics.model_copy(update={"availability": [*provider_items, *canonical_items]})
+
+
+def canonical_metric_period_context(metrics: FinancialMetrics) -> dict[str, dict[str, Any]]:
+    """Return a compact agent-readable view of required canonical metrics by period."""
+
+    availability_by_key = {item.key: item for item in canonical_metric_availability(metrics)}
+    metric_by_key = {
+        (metric.metric_name, metric.period_role): metric
+        for metric in [*metrics.canonical_metrics, *metrics.derived_metrics]
+        if metric.metric_name in REQUIRED_CANONICAL_METRIC_KEYS
+        and metric.period_role in REQUIRED_CANONICAL_PERIOD_ROLES
+    }
+    refs_by_key = {
+        (ref.metric_name, ref.period_role): ref
+        for ref in metrics.source_refs
+        if ref.metric_name in REQUIRED_CANONICAL_METRIC_KEYS
+        and ref.period_role in REQUIRED_CANONICAL_PERIOD_ROLES
+    }
+
+    grouped: dict[str, dict[str, Any]] = {}
+    for period_role in REQUIRED_CANONICAL_PERIOD_ROLES:
+        role_values: dict[str, Any] = {}
+        for metric_key in REQUIRED_CANONICAL_METRIC_KEYS:
+            spec = _required_spec(metric_key, period_role)
+            if spec is None:
+                continue
+            availability_key = _availability_key(spec)
+            availability = availability_by_key.get(availability_key)
+            metric = metric_by_key.get((metric_key, period_role))
+            source_ref = (
+                metric.source_ref
+                if metric is not None
+                else refs_by_key.get((metric_key, period_role))
+            )
+            role_values[metric_key] = _metric_period_entry(
+                metric=metric,
+                source_ref=source_ref,
+                availability=availability,
+                availability_key=availability_key,
+            )
+        grouped[period_role.value] = role_values
+    return grouped
+
+
+def _required_spec(
+    metric_key: str,
+    period_role: MetricPeriodRole,
+) -> ExpectedMetricSpec | None:
+    return next(
+        (
+            spec
+            for spec in EXPECTED_METRICS
+            if spec.metric_key == metric_key
+            and spec.period_role is period_role
+            and spec.requirement is MetricRequirement.REQUIRED
+        ),
+        None,
+    )
+
+
+def _metric_period_entry(
+    *,
+    metric: MetricValue | None,
+    source_ref: SourceRef | None,
+    availability: AvailabilityItem | None,
+    availability_key: str,
+) -> dict[str, Any]:
+    entry: dict[str, Any] = {
+        "availability_key": availability_key,
+        "status": (
+            availability.status.value
+            if availability is not None
+            else AvailabilityStatus.REQUIRED_MISSING.value
+        ),
+    }
+    if availability is not None:
+        entry["reason"] = availability.reason
+    if metric is not None:
+        entry.update(
+            {
+                "metric_id": metric.metric_id,
+                "value": metric.value,
+                "unit": metric.unit,
+            }
+        )
+    if source_ref is not None:
+        entry["source_ref"] = _compact_source_ref(source_ref)
+    return entry
+
+
+def _compact_source_ref(source_ref: SourceRef) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in source_ref.model_dump(mode="json", exclude_none=True).items()
+        if key
+        in {
+            "source_id",
+            "source_type",
+            "metric_name",
+            "reported_period",
+            "as_of_date",
+            "provider",
+            "provider_row_date",
+            "provider_column_date",
+            "period_role",
+        }
+    }

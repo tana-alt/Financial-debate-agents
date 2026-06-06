@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -23,6 +24,10 @@ SEC_PROVIDER = "sec_company_facts"
 SEC_PERIOD_END_TOLERANCE_DAYS = 15
 SEC_P0_METRICS = ("revenue", "operating_cash_flow", "capex")
 SEC_FORMS = {"10-Q", "10-K", "10-Q/A", "10-K/A"}
+SEC_COMPARISON_PERIOD_ROLES = (
+    MetricPeriodRole.PREVIOUS_QUARTER,
+    MetricPeriodRole.YEAR_AGO_QUARTER,
+)
 
 
 @dataclass(frozen=True)
@@ -107,6 +112,7 @@ def build_sec_company_facts_metrics(
             fiscal_period=fiscal_period,
             cik=resolved_cik,
             value=value,
+            period_role=MetricPeriodRole.ACTUAL,
         )
         for value in selected.values()
         if value is not None
@@ -128,7 +134,7 @@ def build_sec_company_facts_metrics(
 
     from .preprocessor import build_financial_metrics
 
-    return build_financial_metrics(
+    metrics = build_financial_metrics(
         ticker=ticker,
         fiscal_period=fiscal_period,
         target_period_end_date=target_period_end_date,
@@ -138,6 +144,113 @@ def build_sec_company_facts_metrics(
         source_refs=source_refs,
         availability=availability,
     )
+    comparison_metrics: list[FinancialMetrics] = []
+    for period_role, period_end_date in _comparison_period_end_dates(
+        target_period_end_date
+    ).items():
+        comparison_metrics.append(
+            _build_sec_period_metrics(
+                ticker=ticker,
+                fiscal_period=fiscal_period,
+                target_period_end_date=period_end_date,
+                facts=facts,
+                cik=resolved_cik,
+                period_role=period_role,
+            )
+        )
+
+    if not comparison_metrics:
+        return metrics
+
+    merged_source_refs = list(metrics.source_refs)
+    merged_canonical_metrics = list(metrics.canonical_metrics)
+    merged_derived_metrics = list(metrics.derived_metrics)
+    merged_availability = list(metrics.availability)
+    for period_metrics in comparison_metrics:
+        merged_source_refs.extend(period_metrics.source_refs)
+        merged_canonical_metrics.extend(period_metrics.canonical_metrics)
+        merged_derived_metrics.extend(period_metrics.derived_metrics)
+        merged_availability.extend(period_metrics.availability)
+    return metrics.model_copy(
+        update={
+            "source_refs": merged_source_refs,
+            "canonical_metrics": merged_canonical_metrics,
+            "derived_metrics": merged_derived_metrics,
+            "availability": merged_availability,
+        }
+    )
+
+
+def _build_sec_period_metrics(
+    *,
+    ticker: str,
+    fiscal_period: str,
+    target_period_end_date: date,
+    facts: dict[str, Any],
+    cik: int | None,
+    period_role: MetricPeriodRole,
+) -> FinancialMetrics:
+    selected = {
+        metric_name: select_sec_fact_value(
+            facts,
+            metric_name,
+            target_period_end_date=target_period_end_date,
+        )
+        for metric_name in SEC_P0_METRICS
+    }
+    source_refs = [
+        _sec_source_ref(
+            ticker=ticker,
+            fiscal_period=fiscal_period,
+            cik=cik,
+            value=value,
+            period_role=period_role,
+        )
+        for value in selected.values()
+        if value is not None
+    ]
+    availability = [
+        AvailabilityItem(
+            key=f"sec:{period_role.value}:{metric_name}",
+            status=AvailabilityStatus.OPTIONAL_MISSING,
+            reason=(
+                f"SEC Company Facts did not provide a verified {period_role.value} "
+                f"{metric_name} value for {target_period_end_date.isoformat()}."
+            ),
+            source_type=SourceType.FINANCIAL_API,
+        )
+        for metric_name, value in selected.items()
+        if value is None
+    ]
+
+    from .preprocessor import build_financial_metrics
+
+    return build_financial_metrics(
+        ticker=ticker,
+        fiscal_period=fiscal_period,
+        target_period_end_date=target_period_end_date,
+        revenue=_metric_value(selected["revenue"]),
+        operating_cash_flow=_metric_value(selected["operating_cash_flow"]),
+        capex=_metric_value(selected["capex"]),
+        source_refs=source_refs,
+        availability=availability,
+        period_role=period_role,
+    )
+
+
+def _comparison_period_end_dates(target_period_end_date: date) -> dict[MetricPeriodRole, date]:
+    return {
+        MetricPeriodRole.PREVIOUS_QUARTER: _shift_months(target_period_end_date, -3),
+        MetricPeriodRole.YEAR_AGO_QUARTER: _shift_months(target_period_end_date, -12),
+    }
+
+
+def _shift_months(value: date, months: int) -> date:
+    month_index = value.month - 1 + months
+    year = value.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(value.day, monthrange(year, month)[1])
+    return date(year, month, day)
 
 
 def select_sec_fact_value(
@@ -280,10 +393,15 @@ def _sec_source_ref(
     fiscal_period: str,
     cik: int | None,
     value: SecFactValue,
+    period_role: MetricPeriodRole,
 ) -> SourceRef:
     cik_part = f":{cik:010d}" if cik is not None else ""
+    role_part = (
+        "" if period_role is MetricPeriodRole.ACTUAL else f":{_period_role_suffix(period_role)}"
+    )
     title_parts = [
         f"SEC Company Facts {value.tag}",
+        f"period_role={period_role.value}",
         f"method={value.method}",
         f"form={value.form}",
         f"end={value.end.isoformat()}",
@@ -295,7 +413,10 @@ def _sec_source_ref(
     if value.prior_accn:
         title_parts.append(f"prior_accn={value.prior_accn}")
     return SourceRef(
-        source_id=f"financial_api:{ticker.upper()}:{fiscal_period}:sec{cik_part}:{value.metric_name}",
+        source_id=(
+            f"financial_api:{ticker.upper()}:{fiscal_period}:sec{cik_part}"
+            f"{role_part}:{value.metric_name}"
+        ),
         source_type=SourceType.FINANCIAL_API,
         metric_name=value.metric_name,
         title=" ".join(title_parts),
@@ -303,8 +424,16 @@ def _sec_source_ref(
         provider=SEC_PROVIDER,
         provider_column_date=value.end,
         as_of_date=value.filed,
-        period_role=MetricPeriodRole.ACTUAL,
+        period_role=period_role,
     )
+
+
+def _period_role_suffix(period_role: MetricPeriodRole) -> str:
+    if period_role is MetricPeriodRole.PREVIOUS_QUARTER:
+        return "pq"
+    if period_role is MetricPeriodRole.YEAR_AGO_QUARTER:
+        return "ya"
+    return period_role.value
 
 
 def _empty_sec_metrics(

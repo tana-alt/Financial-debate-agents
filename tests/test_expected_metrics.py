@@ -8,8 +8,10 @@ from src.expected_metrics import (
 from src.workflow_models import (
     AgentRole,
     AvailabilityStatus,
+    DerivedMetricValue,
     FinancialMetrics,
     MetricPeriodRole,
+    MetricValue,
     SourceRef,
     SourceType,
 )
@@ -26,24 +28,100 @@ def test_expected_metric_registry_marks_presentation_reference_only_non_cap():
     assert all(not spec.cap_if_missing for spec in presentation_specs)
 
 
-def financial_ref(metric_name, *, provider="sec_company_facts", reported_period="2025Q3"):
+def financial_ref(
+    metric_name,
+    *,
+    provider="sec_company_facts",
+    reported_period="2025Q3",
+    period_role=MetricPeriodRole.ACTUAL,
+):
     return SourceRef(
-        source_id=f"financial_api:NVDA:{reported_period}:{provider}:{metric_name}",
+        source_id=(
+            f"financial_api:NVDA:{reported_period}:{provider}:{period_role.value}:{metric_name}"
+        ),
         source_type=SourceType.FINANCIAL_API,
         metric_name=metric_name,
         reported_period=reported_period,
         provider=provider,
-        period_role=MetricPeriodRole.ACTUAL,
+        period_role=period_role,
     )
 
 
-def derived_fcf_ref(*, reported_period="2025Q3"):
+def derived_fcf_ref(*, reported_period="2025Q3", period_role=MetricPeriodRole.ACTUAL):
     return SourceRef(
-        source_id=f"metric:NVDA:{reported_period}:free_cash_flow:derived",
+        source_id=f"metric:NVDA:{reported_period}:{period_role.value}:free_cash_flow:derived",
         source_type=SourceType.DERIVED_METRIC,
         metric_name="free_cash_flow",
         reported_period=reported_period,
-        period_role=MetricPeriodRole.ACTUAL,
+        period_role=period_role,
+    )
+
+
+REQUIRED_PERIOD_ROLES = (
+    MetricPeriodRole.ACTUAL,
+    MetricPeriodRole.PREVIOUS_QUARTER,
+    MetricPeriodRole.YEAR_AGO_QUARTER,
+)
+
+
+def complete_three_period_metrics() -> FinancialMetrics:
+    source_refs: list[SourceRef] = []
+    canonical_metrics: list[MetricValue] = []
+    derived_metrics: list[DerivedMetricValue] = []
+    values = {
+        "revenue": 35_000_000_000,
+        "eps": 0.81,
+        "operating_cash_flow": 15_000_000_000,
+        "capex": -3_000_000_000,
+    }
+    for period_role in REQUIRED_PERIOD_ROLES:
+        for metric_name, value in values.items():
+            provider = "yfinance" if metric_name == "eps" else "sec_company_facts"
+            ref = financial_ref(metric_name, provider=provider, period_role=period_role)
+            source_refs.append(ref)
+            canonical_metrics.append(
+                MetricValue(
+                    metric_id=f"metric:NVDA:2025Q3:{period_role.value}:{metric_name}",
+                    metric_name=metric_name,
+                    value=value,
+                    unit="USD/share" if metric_name == "eps" else "USD",
+                    fiscal_period="2025Q3",
+                    period_role=period_role,
+                    source_ref=ref,
+                )
+            )
+        fcf_ref = derived_fcf_ref(period_role=period_role)
+        source_refs.append(fcf_ref)
+        derived_metrics.append(
+            DerivedMetricValue(
+                metric_id=f"metric:NVDA:2025Q3:{period_role.value}:free_cash_flow",
+                metric_name="free_cash_flow",
+                value=12_000_000_000,
+                unit="USD",
+                fiscal_period="2025Q3",
+                period_role=period_role,
+                source_ref=fcf_ref,
+                component_metric_ids=[
+                    f"metric:NVDA:2025Q3:{period_role.value}:operating_cash_flow",
+                    f"metric:NVDA:2025Q3:{period_role.value}:capex",
+                ],
+                component_source_refs=[
+                    financial_ref("operating_cash_flow", period_role=period_role),
+                    financial_ref("capex", period_role=period_role),
+                ],
+            )
+        )
+    return FinancialMetrics(
+        ticker="NVDA",
+        fiscal_period="2025Q3",
+        revenue=35_000_000_000,
+        eps=0.81,
+        operating_cash_flow=15_000_000_000,
+        capex=-3_000_000_000,
+        free_cash_flow=12_000_000_000,
+        source_refs=source_refs,
+        canonical_metrics=canonical_metrics,
+        derived_metrics=derived_metrics,
     )
 
 
@@ -52,11 +130,18 @@ def test_expected_metric_context_is_readable_for_agents():
 
     assert context["role"] == "cash_flow_risk"
     assert "required" in context
-    assert any(item["metric_key"] == "operating_cash_flow" for item in context["required"])
-    assert any(item["metric_key"] == "free_cash_flow" for item in context["required"])
+    required = {(item["metric_key"], item["period_role"]) for item in context["required"]}
+    assert ("operating_cash_flow", "actual") in required
+    assert ("operating_cash_flow", "previous_quarter") in required
+    assert ("operating_cash_flow", "year_ago_quarter") in required
+    assert ("free_cash_flow", "actual") in required
+    assert ("free_cash_flow", "previous_quarter") in required
+    assert ("free_cash_flow", "year_ago_quarter") in required
     assert all(item["cap_if_missing"] for item in context["required"])
-    assert any(item["metric_key"] == "prior_period_metrics" for item in context["not_in_contract"])
-    assert any(
+    assert not any(
+        item["metric_key"] == "prior_period_metrics" for item in context["not_in_contract"]
+    )
+    assert not any(
         item["metric_key"] == "year_ago_period_metrics" for item in context["not_in_contract"]
     )
 
@@ -75,26 +160,42 @@ def test_expected_metric_registry_marks_all_requirement_buckets():
 
 
 def test_canonical_metric_availability_caps_only_required_canonical_gaps():
-    metrics = FinancialMetrics(
-        ticker="NVDA",
-        fiscal_period="2025Q3",
-        revenue=35_000_000_000,
-        eps=0.81,
-        operating_cash_flow=15_000_000_000,
-        capex=-3_000_000_000,
-        free_cash_flow=12_000_000_000,
-        source_refs=[
-            financial_ref("revenue"),
-            financial_ref("eps", provider="yfinance"),
-            financial_ref("operating_cash_flow"),
-            financial_ref("capex"),
-            derived_fcf_ref(),
-        ],
-    )
+    metrics = complete_three_period_metrics()
 
     items = canonical_metric_availability(metrics)
 
     assert all(item.status is AvailabilityStatus.AVAILABLE for item in items)
+    assert len(items) == 15
+
+
+def test_canonical_metric_availability_is_period_role_specific():
+    metrics = complete_three_period_metrics()
+    metrics = metrics.model_copy(
+        update={
+            "source_refs": [
+                ref
+                for ref in metrics.source_refs
+                if not (
+                    ref.metric_name == "revenue"
+                    and ref.period_role is MetricPeriodRole.PREVIOUS_QUARTER
+                )
+            ],
+            "canonical_metrics": [
+                metric
+                for metric in metrics.canonical_metrics
+                if not (
+                    metric.metric_name == "revenue"
+                    and metric.period_role is MetricPeriodRole.PREVIOUS_QUARTER
+                )
+            ],
+        }
+    )
+
+    by_key = {item.key: item for item in canonical_metric_availability(metrics)}
+
+    assert by_key["revenue"].status is AvailabilityStatus.AVAILABLE
+    assert by_key["previous_quarter:revenue"].status is AvailabilityStatus.REQUIRED_MISSING
+    assert by_key["year_ago_quarter:revenue"].status is AvailabilityStatus.AVAILABLE
 
 
 def test_presentation_sourced_top_level_value_does_not_satisfy_canonical_availability():

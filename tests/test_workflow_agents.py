@@ -13,7 +13,7 @@ from src.workflow_agents import (
     EarningsQualityAnalyst,
     GuidanceAnalyst,
     JudgeAgent,
-    JudgeDecision,
+    JudgeDecisionSelection,
     WorkflowAgent,
     build_default_agents,
 )
@@ -191,9 +191,7 @@ def bull_json(include_coverage=True):
       "agent_name": "bull_agent",
       "thesis": "The result can be viewed positively because EPS quality improved.",
       "stance_strength": "moderate",
-      "strongest_positive_evidence": [
-        {evidence_json("ev:bull:positive", "positive")}
-      ],
+      "strongest_positive_evidence_ids": ["ev:bull:positive"],
       {coverage}
       "eps_bull_argument": "Operating margin support improves the EPS case.",
       "fcf_bull_argument": "FCF could improve if growth CapEx normalizes.",
@@ -213,9 +211,7 @@ def bear_json(include_coverage=True):
       "agent_name": "bear_agent",
       "thesis": "The result could remain neutral because FCF pressure is unresolved.",
       "stance_strength": "moderate",
-      "strongest_negative_evidence": [
-        {evidence_json("ev:bear:negative", "negative", "filing:capex")}
-      ],
+      "strongest_negative_evidence_ids": ["ev:bear:negative"],
       {coverage}
       "eps_bear_argument": "EPS improvement may not fully convert to cash.",
       "fcf_bear_argument": "CapEx and working capital keep FCF risk elevated.",
@@ -235,36 +231,8 @@ def judge_json():
       "confidence": 0.61,
       "summary": "Positive EPS evidence is balanced by FCF uncertainty.",
       "rationale": "The print has credible EPS improvement, but FCF conversion remains unresolved.",
-      "positive_evidence": [
-        {
-          "evidence_id": "ev_eps_1",
-          "polarity": "positive",
-          "summary": "EPS quality improved.",
-          "detail": "Adjusted EPS exceeded consensus with operating margin support.",
-          "impact_areas": ["eps"],
-          "source_ref": {
-            "source_id": "derived:eps:1",
-            "source_type": "derived_metric",
-            "metric_name": "eps_surprise_pct"
-          },
-          "confidence": 0.72
-        }
-      ],
-      "negative_evidence": [
-        {
-          "evidence_id": "ev_fcf_1",
-          "polarity": "negative",
-          "summary": "FCF conversion remains weak.",
-          "detail": "CapEx timing makes FCF improvement uncertain.",
-          "impact_areas": ["fcf"],
-          "source_ref": {
-            "source_id": "derived:fcf:1",
-            "source_type": "derived_metric",
-            "metric_name": "free_cash_flow"
-          },
-          "confidence": 0.66
-        }
-      ],
+      "positive_evidence_ids": ["ev_eps_1"],
+      "negative_evidence_ids": ["ev_fcf_1"],
       "eps_outlook": "Margins support future EPS.",
       "eps_outlook_reason": "Margins and EPS surprise support future EPS.",
       "fcf_outlook": "CapEx timing is still uncertain.",
@@ -568,7 +536,7 @@ def test_bear_agent_rejects_missing_finding_coverage():
         agent.run({"analysis_brief": {"summary": "brief"}})
 
 
-def test_judge_agent_returns_judge_decision_contract():
+def test_judge_agent_returns_judge_selection_contract():
     llm = FakeLLM([judge_json()])
     agent = JudgeAgent(llm)
 
@@ -582,7 +550,72 @@ def test_judge_agent_returns_judge_decision_contract():
         }
     )
 
-    assert isinstance(result, JudgeDecision)
+    assert isinstance(result, JudgeDecisionSelection)
     assert result.verdict.value == "neutral"
+    assert result.positive_evidence_ids == ["ev_eps_1"]
+    assert result.negative_evidence_ids == ["ev_fcf_1"]
     assert "raw_filing" not in llm.calls[0]["user"]
     assert "expected_metrics" in llm.calls[0]["user"]
+
+
+def test_judge_agent_prompt_routes_candidate_evidence_ids_and_pools():
+    llm = FakeLLM([judge_json()])
+    agent = JudgeAgent(llm)
+
+    agent.run(
+        {
+            "run_spec": {"ticker": "NVDA", "fiscal_period": "2025Q3"},
+            "analysis_brief": {"summary": "Validated brief"},
+            "bull_case": {"agent_name": "bull_agent"},
+            "bear_case": {"agent_name": "bear_agent"},
+            "positive_evidence_pool": [
+                {
+                    "evidence_id": "ev_eps_1",
+                    "source_ref": {"source_id": "derived:eps:1"},
+                }
+            ],
+            "negative_evidence_pool": [
+                {
+                    "evidence_id": "ev_fcf_1",
+                    "source_ref": {"source_id": "filing:liquidity"},
+                }
+            ],
+            "valid_positive_evidence_ids": ["ev_eps_1"],
+            "valid_negative_evidence_ids": ["ev_fcf_1"],
+        }
+    )
+
+    prompt = llm.calls[0]["user"]
+    assert "positive_evidence_pool" in prompt
+    assert "negative_evidence_pool" in prompt
+    assert "valid_positive_evidence_ids" in prompt
+    assert "valid_negative_evidence_ids" in prompt
+    assert "ev_eps_1" in prompt
+    assert "ev_fcf_1" in prompt
+    assert "`*_evidence_ids`" in prompt
+    assert "nested EvidenceItemは返さない" in prompt
+
+
+def test_debate_and_judge_output_token_caps_are_raised_for_real_llm_stability():
+    for agent_class in ALL_WORKFLOW_AGENT_CLASSES:
+        assert agent_class.spec.max_tokens >= 8192
+    assert JudgeAgent.spec.max_tokens >= 12_000
+
+
+def test_agent_records_attempt_trace_for_retry_and_token_usage():
+    traces = []
+    llm = FakeLLM(["not json", earnings_quality_json()])
+    agent = EarningsQualityAnalyst(llm, max_retries=1, trace_sink=traces)
+
+    result = agent.run({"run_spec": {"ticker": "NVDA"}})
+
+    assert result.agent_name == "EarningsQualityAnalyst"
+    assert len(traces) == 1
+    trace = traces[0]
+    assert trace.public_role == "EarningsQualityAnalyst"
+    assert trace.attempt_count == 2
+    assert trace.success is True
+    assert trace.total_input_tokens == 2
+    assert trace.total_output_tokens == 2
+    assert trace.attempts[0].error_kind == "invalid_json"
+    assert trace.attempts[1].success is True

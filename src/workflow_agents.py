@@ -92,6 +92,10 @@ REQUIRED_FINDING_COVERAGE_KEYS = {
     "guidance",
 }
 
+DEFAULT_AGENT_MAX_TOKENS = 8192
+DEBATE_AGENT_MAX_TOKENS = 8192
+JUDGE_AGENT_MAX_TOKENS = 12_000
+
 EXPECTED_METRIC_ROLE_BY_PUBLIC_ROLE: dict[str, _workflow_models.AgentRole] = {
     "EarningsQualityAnalyst": _workflow_models.AgentRole.EARNINGS_QUALITY,
     "CashFlowRiskAnalyst": _workflow_models.AgentRole.CASH_FLOW_RISK,
@@ -192,6 +196,9 @@ BalanceSheetRiskFinding = getattr(_workflow_models, "BalanceSheetRiskFinding", C
 
 
 JsonModel = type[BaseModel]
+BullCaseSelection = _workflow_models.BullCaseSelection
+BearCaseSelection = _workflow_models.BearCaseSelection
+JudgeDecisionSelection = _workflow_models.JudgeDecisionSelection
 
 
 @dataclass(frozen=True)
@@ -203,7 +210,7 @@ class AgentSpec:
     system_prompt: str
     task_prompt: str
     role_aliases: tuple[str, ...] = ()
-    max_tokens: int = 1600
+    max_tokens: int = DEFAULT_AGENT_MAX_TOKENS
     temperature: float = 0.2
 
     @property
@@ -292,9 +299,16 @@ class WorkflowAgent:
 
     spec: AgentSpec
 
-    def __init__(self, llm: LLMProvider, *, max_retries: int = 1):
+    def __init__(
+        self,
+        llm: LLMProvider,
+        *,
+        max_retries: int = 1,
+        trace_sink: list[_workflow_models.AgentExecutionTrace] | None = None,
+    ):
         self.llm = llm
         self.max_retries = max(0, max_retries)
+        self.trace_sink = trace_sink
 
     def __call__(self, **context: Any) -> BaseModel:
         return self.run(context)
@@ -310,23 +324,59 @@ class WorkflowAgent:
         user_prompt = self._build_user_prompt(routed_context, schema)
 
         last_error: AgentOutputValidationError | None = None
+        attempts: list[_workflow_models.AgentAttemptTrace] = []
         for attempt in range(self.max_retries + 1):
             prompt = user_prompt if attempt == 0 else self._repair_prompt(user_prompt, last_error)
-            response = self._invoke_llm(prompt, schema)
+            try:
+                response, structured_output = self._invoke_llm(prompt, schema)
+            except Exception as exc:
+                attempts.append(
+                    self._attempt_trace(
+                        attempt=attempt + 1,
+                        success=False,
+                        structured_output=False,
+                        response=None,
+                        error=exc,
+                    )
+                )
+                self._record_trace(attempts)
+                raise
             text = getattr(response, "text", response)
             try:
-                return self._parse_output(str(text))
+                parsed = self._parse_output(str(text))
+                attempts.append(
+                    self._attempt_trace(
+                        attempt=attempt + 1,
+                        success=True,
+                        structured_output=structured_output,
+                        response=response,
+                        error=None,
+                    )
+                )
+                self._record_trace(attempts)
+                return parsed
             except AgentOutputValidationError as exc:
                 last_error = exc
+                attempts.append(
+                    self._attempt_trace(
+                        attempt=attempt + 1,
+                        success=False,
+                        structured_output=structured_output,
+                        response=response,
+                        error=exc,
+                    )
+                )
                 if attempt >= self.max_retries or not self._should_repair(exc):
                     break
 
         if last_error is None:
+            self._record_trace(attempts)
             raise AgentOutputValidationError(
                 f"{self.spec.public_role} failed to produce an LLM response",
                 error_kind="empty_response",
             )
-        self._raise_repair_exhausted(last_error)
+        self._record_trace(attempts)
+        self._raise_repair_exhausted(last_error, attempts)
 
     def _select_context(self, context: Mapping[str, Any]) -> dict[str, Any]:
         enriched_context = self._with_expected_metric_context(context)
@@ -354,6 +404,19 @@ class WorkflowAgent:
             "制約:\n"
             "- 入力された routed_context だけを使う。\n"
             "- 財務指標を自分で計算しない。\n"
+            "- missing/confidence低下の対象は `expected_metrics.required` にあり、"
+            "`cap_if_missing=true` のcanonical/derived metricが同じ `period_role` で"
+            "欠けている場合だけに限定する。\n"
+            "- optional、reference_only、not_in_contract、presentation、transcript、"
+            "news、analyst-reportの欠損やconflictではmissing_dataを書かず、"
+            "confidenceを下げない。\n"
+            "- 決算プレゼン、filing、shareholder letterなどの会社側テキストが、"
+            "自分の担当領域に関係する重要な不確実性や条件付きリスクを会社自身の"
+            "説明として明示している場合、その根拠をallowed fieldsに書き、"
+            "自分のconfidenceを割り引く。未記述の予想や未開示データはこの扱いにしない。\n"
+            "- summary、detail、handoff_summary、thesis、rationale、outlook理由など"
+            "自然文のJSON field valueは日本語で書く。JSON schema key、enum値、"
+            "evidence_id、source_id、metric_name、ticker、unitは変更しない。\n"
             "- 株価予測、目標株価、売買推奨を書かない。\n"
             "- EvidenceItem.source_ref は routed_context.source_index にある"
             " source_ref/source entry を正確にコピーする。source_id, source_type,"
@@ -361,7 +424,9 @@ class WorkflowAgent:
             "- `financial_api:NVDA:2027Q1` のような汎用source_idを新規作成しない。"
             " source_id は source_index に存在する値だけを使う。\n"
             "- routed_context に valid_positive_evidence_ids や valid_negative_evidence_ids が"
-            "ある場合、strongest evidence の evidence_id はその一覧から完全一致で選ぶ。\n"
+            "ある場合、positive/negative evidence と strongest evidence は"
+            "`*_evidence_ids` fieldにID文字列だけを返し、該当一覧から完全一致で選ぶ。"
+            "候補pool外のIDやnested EvidenceItemは返さない。\n"
             "- JSONのみを返す。Markdownや前置きは禁止。\n"
             f"- role field がある場合は {self.spec.output_agent_name!r} を入れる。\n\n"
             "# routed_context\n"
@@ -370,26 +435,32 @@ class WorkflowAgent:
             f"{_to_json(schema)}"
         )
 
-    def _invoke_llm(self, prompt: str, schema: Mapping[str, Any]) -> Any:
+    def _invoke_llm(self, prompt: str, schema: Mapping[str, Any]) -> tuple[Any, bool]:
         complete_structured = getattr(self.llm, "complete_structured", None)
         if callable(complete_structured) and _is_strict_openai_structured_output_schema(schema):
             try:
-                return complete_structured(
-                    system=self.spec.system_prompt,
-                    user=prompt,
-                    output_schema=schema,
-                    schema_name=self.spec.output_model.__name__,
-                    max_tokens=self.spec.max_tokens,
-                    temperature=self.spec.temperature,
+                return (
+                    complete_structured(
+                        system=self.spec.system_prompt,
+                        user=prompt,
+                        output_schema=schema,
+                        schema_name=self.spec.output_model.__name__,
+                        max_tokens=self.spec.max_tokens,
+                        temperature=self.spec.temperature,
+                    ),
+                    True,
                 )
             except NotImplementedError:
                 pass
 
-        return self.llm.complete(
-            system=self.spec.system_prompt,
-            user=prompt,
-            max_tokens=self.spec.max_tokens,
-            temperature=self.spec.temperature,
+        return (
+            self.llm.complete(
+                system=self.spec.system_prompt,
+                user=prompt,
+                max_tokens=self.spec.max_tokens,
+                temperature=self.spec.temperature,
+            ),
+            False,
         )
 
     def _parse_output(self, text: str) -> BaseModel:
@@ -412,10 +483,15 @@ class WorkflowAgent:
             WorkflowErrorCategory.AGENT_ROLE,
         }
 
-    def _raise_repair_exhausted(self, error: AgentOutputValidationError) -> NoReturn:
+    def _raise_repair_exhausted(
+        self,
+        error: AgentOutputValidationError,
+        attempts: list[_workflow_models.AgentAttemptTrace],
+    ) -> NoReturn:
+        trace_summary = self._trace_error_summary(attempts)
         message = (
             f"{self.spec.public_role} failed to produce valid JSON for "
-            f"{self.spec.output_model.__name__}: {error}"
+            f"{self.spec.output_model.__name__}: {error}; {trace_summary}"
         )
         if error.category is WorkflowErrorCategory.AGENT_ROLE:
             raise AgentRoleMismatch(message, field=error.field, retryable=False) from error
@@ -426,6 +502,59 @@ class WorkflowAgent:
             field=error.field,
             retryable=False,
         ) from error
+
+    def _attempt_trace(
+        self,
+        *,
+        attempt: int,
+        success: bool,
+        structured_output: bool,
+        response: Any | None,
+        error: Exception | None,
+    ) -> _workflow_models.AgentAttemptTrace:
+        text = getattr(response, "text", "") if response is not None else ""
+        category = getattr(error, "category", None)
+        error_kind = getattr(error, "error_kind", None)
+        return _workflow_models.AgentAttemptTrace(
+            attempt=attempt,
+            success=success,
+            structured_output=structured_output,
+            input_tokens=int(getattr(response, "input_tokens", 0) or 0),
+            output_tokens=int(getattr(response, "output_tokens", 0) or 0),
+            output_chars=len(str(text)),
+            category=category,
+            error_kind=str(error_kind) if error_kind else None,
+            retryable=bool(getattr(error, "retryable", False)),
+        )
+
+    def _record_trace(self, attempts: list[_workflow_models.AgentAttemptTrace]) -> None:
+        if self.trace_sink is None:
+            return
+        self.trace_sink.append(
+            _workflow_models.AgentExecutionTrace(
+                public_role=self.spec.public_role,
+                output_model=self.spec.output_model.__name__,
+                max_retries=self.max_retries,
+                attempt_count=len(attempts),
+                success=bool(attempts and attempts[-1].success),
+                total_input_tokens=sum(item.input_tokens for item in attempts),
+                total_output_tokens=sum(item.output_tokens for item in attempts),
+                attempts=attempts,
+            )
+        )
+
+    def _trace_error_summary(
+        self,
+        attempts: list[_workflow_models.AgentAttemptTrace],
+    ) -> str:
+        if not attempts:
+            return "attempts=0"
+        return (
+            f"attempts={len(attempts)}, "
+            f"input_tokens={sum(item.input_tokens for item in attempts)}, "
+            f"output_tokens={sum(item.output_tokens for item in attempts)}, "
+            f"last_error_kind={attempts[-1].error_kind or 'unknown'}"
+        )
 
     def _repair_prompt(self, original_prompt: str, error: Exception | None) -> str:
         details = [f"{type(error).__name__}: {error}"]
@@ -445,6 +574,10 @@ class WorkflowAgent:
             f"{chr(10).join(details)}\n\n"
             "上のエラーを修正し、同じschemaに合うJSONのみを返してください。\n"
             f"role field がある場合は {self.spec.output_agent_name!r} を入れてください。\n"
+            "自然文のJSON field valueは日本語で書いてください。JSON schema key、enum値、"
+            "evidence_id、source_id、metric_name、ticker、unitは変更しないでください。\n"
+            "schemaに `*_evidence_ids` field がある場合は、候補pool内の evidence_id "
+            "文字列だけを返し、nested EvidenceItem や source_ref を出力しないでください。\n"
             "`source_ref` は routed_context.source_index に存在するentryを正確にコピーしてください。"
             "source_id, source_type, url, document_id, section_id, metric_name, page, title を"
             "省略・変更しないでください。source_indexに存在しないsource_idを作らないでください。\n"
@@ -585,7 +718,7 @@ class BullAgent(WorkflowAgent):
     spec = AgentSpec(
         public_role="BullAgent",
         output_agent_name="bull_agent",
-        output_model=BullCase,
+        output_model=BullCaseSelection,
         context_keys=(
             "run_spec",
             "expected_metrics",
@@ -597,6 +730,8 @@ class BullAgent(WorkflowAgent):
             "guidance_finding",
             "positive_evidence_pool",
             "negative_evidence_pool",
+            "valid_positive_evidence_ids",
+            "valid_negative_evidence_ids",
             "disputed_points",
             "missing_data",
         ),
@@ -605,11 +740,12 @@ class BullAgent(WorkflowAgent):
             "validated AnalysisBriefだけからgoodと評価できる最も強いcaseを作る。",
         ),
         task_prompt=(
-            "BullCase JSONを作成してください。finding_coverageには earnings_quality, "
-            "cash_flow_risk, management_intent, guidance を必ず含めてください。"
+            "BullCaseSelection JSONを作成してください。finding_coverageには earnings_quality, "
+            "cash_flow_risk, management_intent, guidance を必ず含め、"
+            "strongest_positive_evidence_idsには候補IDのみを返してください。"
         ),
         role_aliases=("BullAgent", "bull"),
-        max_tokens=1400,
+        max_tokens=DEBATE_AGENT_MAX_TOKENS,
     )
 
 
@@ -617,7 +753,7 @@ class BearAgent(WorkflowAgent):
     spec = AgentSpec(
         public_role="BearAgent",
         output_agent_name="bear_agent",
-        output_model=BearCase,
+        output_model=BearCaseSelection,
         context_keys=(
             "run_spec",
             "expected_metrics",
@@ -630,6 +766,8 @@ class BearAgent(WorkflowAgent):
             "bull_case_summary",
             "positive_evidence_pool",
             "negative_evidence_pool",
+            "valid_positive_evidence_ids",
+            "valid_negative_evidence_ids",
             "disputed_points",
             "missing_data",
         ),
@@ -638,11 +776,12 @@ class BearAgent(WorkflowAgent):
             "validated AnalysisBriefと必要ならBullCaseSummaryからdownside/neutral caseを作る。",
         ),
         task_prompt=(
-            "BearCase JSONを作成してください。finding_coverageには earnings_quality, "
-            "cash_flow_risk, management_intent, guidance を必ず含めてください。"
+            "BearCaseSelection JSONを作成してください。finding_coverageには earnings_quality, "
+            "cash_flow_risk, management_intent, guidance を必ず含め、"
+            "strongest_negative_evidence_idsには候補IDのみを返してください。"
         ),
         role_aliases=("BearAgent", "bear"),
-        max_tokens=1400,
+        max_tokens=DEBATE_AGENT_MAX_TOKENS,
     )
 
 
@@ -650,7 +789,7 @@ class JudgeAgent(WorkflowAgent):
     spec = AgentSpec(
         public_role="JudgeAgent",
         output_agent_name="judge_agent",
-        output_model=FinalVerdict,
+        output_model=JudgeDecisionSelection,
         context_keys=(
             "run_spec",
             "expected_metrics",
@@ -658,14 +797,18 @@ class JudgeAgent(WorkflowAgent):
             "analysis_brief",
             "bull_case",
             "bear_case",
+            "positive_evidence_pool",
+            "negative_evidence_pool",
+            "valid_positive_evidence_ids",
+            "valid_negative_evidence_ids",
         ),
         system_prompt=_system(
             "JudgeAgent",
             "validated AnalysisBrief、BullCase、BearCaseを比較しgood/neutral/badを判定する。",
         ),
-        task_prompt="JudgeDecision JSONを作成してください。",
+        task_prompt="JudgeDecisionSelection JSONを作成してください。",
         role_aliases=("JudgeAgent", "judge"),
-        max_tokens=1400,
+        max_tokens=JUDGE_AGENT_MAX_TOKENS,
         temperature=0.1,
     )
 

@@ -31,25 +31,36 @@ def test_reviews_api_fake_smoke_returns_markdown_report(monkeypatch):
     assert body["status"] == "completed"
     assert body["request_id"] == "req-api-contract-1"
     assert body["quality_gate_result"]["status"] == "passed"
-    assert body["quality_gate_result"]["source_manifest_entries"] == 8
+    assert body["quality_gate_result"]["source_manifest_entries"] == 18
     assert {source["source_id"] for source in body["claim_matrix"]["source_manifest"]} == {
         "financial_api:NVDA:2025Q3:yfinance:eps",
         "financial_api:NVDA:2025Q3:sec:revenue",
         "financial_api:NVDA:2025Q3:sec:operating_cash_flow",
         "financial_api:NVDA:2025Q3:sec:capex",
         "metric:NVDA:2025Q3:free_cash_flow:derived",
+        "financial_api:NVDA:2025Q3:yfinance:previous_quarter:eps",
+        "financial_api:NVDA:2025Q3:sec:previous_quarter:revenue",
+        "financial_api:NVDA:2025Q3:sec:previous_quarter:operating_cash_flow",
+        "financial_api:NVDA:2025Q3:sec:previous_quarter:capex",
+        "metric:NVDA:2025Q3:previous_quarter:free_cash_flow:derived",
+        "financial_api:NVDA:2025Q3:yfinance:year_ago_quarter:eps",
+        "financial_api:NVDA:2025Q3:sec:year_ago_quarter:revenue",
+        "financial_api:NVDA:2025Q3:sec:year_ago_quarter:operating_cash_flow",
+        "financial_api:NVDA:2025Q3:sec:year_ago_quarter:capex",
+        "metric:NVDA:2025Q3:year_ago_quarter:free_cash_flow:derived",
         "filing:eps",
         "filing:guidance",
         "filing:risk",
     }
     assert body["markdown_report"]
-    assert body["markdown_report"].count("financial_api:NVDA:2025Q3:yfinance:eps") == 1
-    assert body["markdown_report"].count("metric:NVDA:2025Q3:free_cash_flow:derived") == 1
+    assert "financial_api:NVDA:2025Q3:yfinance:eps" in body["markdown_report"]
+    assert "metric:NVDA:2025Q3:free_cash_flow:derived" in body["markdown_report"]
     for section in (
-        "## Judge Rationale",
-        "## Evidence Matrix",
-        "## Quality Gates",
-        "## Disclaimer",
+        "## レポート前提: canonical data",
+        "## 判定理由",
+        "## 根拠マトリクス (Evidence Matrix)",
+        "## 品質ゲート (Quality Gates)",
+        "## 免責事項",
     ):
         assert section in body["markdown_report"]
 

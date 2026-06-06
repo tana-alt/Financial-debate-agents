@@ -31,16 +31,21 @@ def test_fake_provider_runs_seven_agent_workflow_without_keys(monkeypatch):
     assert provider.calls.count("JudgeAgent") == 1
     assert response.markdown_report
     for section in (
-        "## Judge Rationale",
-        "## Bull vs Bear Tension",
-        "## Evidence Matrix",
-        "## Agent Contribution",
-        "## Uncertainty And Missing Data",
-        "## Quality Gates",
-        "## Source Appendix",
-        "## Disclaimer",
+        "## レポート前提: canonical data",
+        "## 要約",
+        "## 判定理由",
+        "## EPS/FCF見通し",
+        "## Bull/Bear論点",
+        "## Agent分析",
+        "## 根拠マトリクス (Evidence Matrix)",
+        "## 不確実性と不足データ",
+        "## 品質ゲート (Quality Gates)",
+        "## ソース付録 (Source Appendix)",
+        "## 免責事項",
     ):
         assert section in response.markdown_report
     assert "| Claim ID | Fact | Interpretation | Implication | Time scope |" in (
         response.markdown_report
     )
+    assert "Precomputed EPS and margin evidence support future EPS." in response.markdown_report
+    assert "CapEx and working capital can delay FCF improvement." in response.markdown_report

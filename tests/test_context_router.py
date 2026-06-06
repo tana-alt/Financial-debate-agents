@@ -17,6 +17,7 @@ from src.workflow_models import (
     SourceRef,
     SourceType,
 )
+from tests.test_api_contract import normalized_review_payload
 
 
 def financial_ref(source_id: str, metric_name: str) -> SourceRef:
@@ -225,6 +226,33 @@ def test_router_guidance_deltas_are_not_full_financial_metrics_aliases():
     assert guidance_context["consensus_deltas"] == []
     assert guidance_context["guidance_metrics"]["company_guidance"]
     assert "ticker" not in guidance_context["guidance_consensus_deltas"]
+
+
+def test_router_supplies_canonical_periods_to_non_financial_agents():
+    request = NormalizedReviewRequest.model_validate(normalized_review_payload())
+
+    routed = ContextRouter().route(request)
+
+    management_periods = routed.by_role[AgentRole.MANAGEMENT_INTENT].context[
+        "financial_snapshot_minimal"
+    ]["canonical_metric_periods"]
+    guidance_periods = routed.by_role[AgentRole.GUIDANCE].context["guidance_metrics"][
+        "canonical_metric_periods"
+    ]
+    for role in (AgentRole.BULL, AgentRole.BEAR, AgentRole.JUDGE):
+        summary_periods = routed.by_role[role].context["financial_snapshot_summary"][
+            "canonical_metric_periods"
+        ]
+        assert summary_periods["previous_quarter"]["revenue"]["status"] == "available"
+        assert (
+            summary_periods["year_ago_quarter"]["free_cash_flow"]["source_ref"]["source_type"]
+            == "derived_metric"
+        )
+
+    assert management_periods["actual"]["eps"]["value"] == 0.81
+    assert management_periods["previous_quarter"]["revenue"]["status"] == "available"
+    assert guidance_periods["year_ago_quarter"]["eps"]["source_ref"]["provider"] == "yfinance"
+    assert guidance_periods["year_ago_quarter"]["free_cash_flow"]["status"] == "available"
 
 
 def test_router_uses_registered_fallback_sources_when_required_role_would_be_starved():

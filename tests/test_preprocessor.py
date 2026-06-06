@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from src.preprocessor import (
+    DEFAULT_CONTEXT_BUDGET,
     build_financial_metrics,
     build_normalized_review_request,
     calculate_surprise_pct,
@@ -27,6 +28,14 @@ def test_safe_float_discards_invalid_external_values():
     assert safe_float(None) is None
     assert safe_float("not-a-number") is None
     assert safe_float(float("nan")) is None
+
+
+def test_default_context_budget_allows_source_forward_reports():
+    assert DEFAULT_CONTEXT_BUDGET == {
+        "max_input_tokens": 96_000,
+        "max_output_tokens": 16_000,
+        "max_total_tokens": 128_000,
+    }
 
 
 def test_calculate_surprise_pct_handles_missing_consensus():
@@ -220,6 +229,113 @@ def test_fetch_consensus_uses_yfinance_revenue_alias(monkeypatch):
         "operating_cash_flow",
         "capex",
     }
+
+
+def test_fetch_consensus_adds_eps_for_previous_and_year_ago_quarters(monkeypatch):
+    from src.preprocessor import fetch_consensus
+
+    class FakeTicker:
+        earnings_dates = pd.DataFrame(
+            [
+                {"Reported EPS": 0.91, "EPS Estimate": 0.88, "Surprise(%)": 3.4},
+                {"Reported EPS": 0.81, "EPS Estimate": 0.75, "Surprise(%)": 8.0},
+                {"Reported EPS": 0.76, "EPS Estimate": 0.72, "Surprise(%)": 5.6},
+                {"Reported EPS": 0.68, "EPS Estimate": 0.65, "Surprise(%)": 4.6},
+                {"Reported EPS": 0.55, "EPS Estimate": 0.54, "Surprise(%)": 1.9},
+            ],
+            index=pd.to_datetime(
+                [
+                    "2025-11-21",
+                    "2025-08-28",
+                    "2025-05-29",
+                    "2024-08-27",
+                    "2024-05-23",
+                ]
+            ),
+        )
+        quarterly_financials = pd.DataFrame(
+            [[123_000.0]],
+            index=["Operating Revenue"],
+            columns=pd.to_datetime(["2025-07-31"]),
+        )
+        quarterly_cashflow = pd.DataFrame(
+            [[20_000.0], [-5_000.0]],
+            index=["OperatingCashFlow", "Capital Expenditure"],
+            columns=pd.to_datetime(["2025-07-31"]),
+        )
+
+        def __init__(self, ticker):
+            self.ticker = ticker
+
+    monkeypatch.setattr("src.preprocessor.yf.Ticker", FakeTicker)
+
+    metrics = fetch_consensus(
+        "nvda",
+        "2025Q3",
+        target_earnings_date=date(2025, 8, 28),
+        target_period_end_date=date(2025, 7, 31),
+    )
+
+    eps_by_role = {
+        metric.period_role: metric
+        for metric in metrics.canonical_metrics
+        if metric.metric_name == "eps"
+    }
+    assert eps_by_role[MetricPeriodRole.ACTUAL].value == 0.81
+    assert eps_by_role[MetricPeriodRole.PREVIOUS_QUARTER].value == 0.76
+    assert eps_by_role[MetricPeriodRole.YEAR_AGO_QUARTER].value == 0.68
+    assert eps_by_role[MetricPeriodRole.PREVIOUS_QUARTER].source_ref.provider_row_date == date(
+        2025, 5, 29
+    )
+    assert eps_by_role[MetricPeriodRole.YEAR_AGO_QUARTER].source_ref.provider_row_date == date(
+        2024, 8, 27
+    )
+
+
+def test_fetch_consensus_accepts_yfinance_earnings_date_within_fifteen_days(monkeypatch):
+    from src.preprocessor import fetch_consensus
+
+    class FakeTicker:
+        earnings_dates = pd.DataFrame(
+            [
+                {"Reported EPS": 0.81, "EPS Estimate": 0.75, "Surprise(%)": 8.0},
+                {"Reported EPS": 0.76, "EPS Estimate": 0.72, "Surprise(%)": 5.6},
+                {"Reported EPS": 0.68, "EPS Estimate": 0.65, "Surprise(%)": 4.6},
+            ],
+            index=pd.to_datetime(["2025-08-28", "2025-05-29", "2024-08-27"]),
+        )
+        quarterly_financials = pd.DataFrame(
+            [[123_000.0]],
+            index=["Operating Revenue"],
+            columns=pd.to_datetime(["2025-07-31"]),
+        )
+        quarterly_cashflow = pd.DataFrame(
+            [[20_000.0], [-5_000.0]],
+            index=["OperatingCashFlow", "Capital Expenditure"],
+            columns=pd.to_datetime(["2025-07-31"]),
+        )
+
+        def __init__(self, ticker):
+            self.ticker = ticker
+
+    monkeypatch.setattr("src.preprocessor.yf.Ticker", FakeTicker)
+
+    metrics = fetch_consensus(
+        "nvda",
+        "2025Q3",
+        target_earnings_date=date(2025, 8, 29),
+        target_period_end_date=date(2025, 7, 31),
+    )
+
+    eps_by_role = {
+        metric.period_role: metric
+        for metric in metrics.canonical_metrics
+        if metric.metric_name == "eps"
+    }
+    assert eps_by_role[MetricPeriodRole.ACTUAL].value == 0.81
+    assert eps_by_role[MetricPeriodRole.ACTUAL].source_ref.provider_row_date == date(2025, 8, 28)
+    assert eps_by_role[MetricPeriodRole.PREVIOUS_QUARTER].value == 0.76
+    assert eps_by_role[MetricPeriodRole.YEAR_AGO_QUARTER].value == 0.68
 
 
 def test_fetch_consensus_accepts_yfinance_period_column_within_fifteen_days(monkeypatch):

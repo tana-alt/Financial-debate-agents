@@ -428,17 +428,7 @@ class FakeProvider(LLMProvider):
                 "agent_name": "bull_agent",
                 "thesis": "EPS quality, management execution, and guidance evidence support a good interpretation.",
                 "stance_strength": "moderate",
-                "strongest_positive_evidence": [
-                    {
-                        "evidence_id": "EarningsQualityAnalyst:positive",
-                        "polarity": "positive",
-                        "summary": "EPS quality improved.",
-                        "detail": "EPS quality improved.",
-                        "impact_areas": ["eps"],
-                        "source_ref": source_ref,
-                        "confidence": 0.70,
-                    }
-                ],
+                "strongest_positive_evidence_ids": ["EarningsQualityAnalyst:positive"],
                 "eps_bull_argument": "Precomputed EPS and margin evidence support future EPS.",
                 "fcf_bull_argument": "FCF can improve if investment intensity moderates.",
                 "conditions_needed": ["Revenue growth and margin discipline continue."],
@@ -461,17 +451,7 @@ class FakeProvider(LLMProvider):
                 "agent_name": "bear_agent",
                 "thesis": "FCF pressure and execution risk keep the result from being one-sided.",
                 "stance_strength": "moderate",
-                "strongest_negative_evidence": [
-                    {
-                        "evidence_id": "CashFlowRiskAnalyst:negative",
-                        "polarity": "negative",
-                        "summary": "CapEx may pressure FCF.",
-                        "detail": "CapEx may pressure FCF.",
-                        "impact_areas": ["fcf"],
-                        "source_ref": source_ref,
-                        "confidence": 0.70,
-                    }
-                ],
+                "strongest_negative_evidence_ids": ["CashFlowRiskAnalyst:negative"],
                 "eps_bear_argument": "Some EPS improvement may rely on conditions that need to persist.",
                 "fcf_bear_argument": "CapEx and working capital can delay FCF improvement.",
                 "failure_modes": ["Demand slows or investment intensity remains elevated."],
@@ -499,28 +479,8 @@ class FakeProvider(LLMProvider):
                 "confidence": 0.76,
                 "summary": "EPS quality and FCF path look constructive with caveats.",
                 "rationale": "Positive EPS and margin evidence outweighed near-term FCF risks.",
-                "positive_evidence": [
-                    {
-                        "evidence_id": "EarningsQualityAnalyst:positive",
-                        "polarity": "positive",
-                        "summary": "EPS quality improved.",
-                        "detail": "EPS quality improved.",
-                        "impact_areas": ["eps"],
-                        "source_ref": positive_source_ref,
-                        "confidence": 0.70,
-                    }
-                ],
-                "negative_evidence": [
-                    {
-                        "evidence_id": "CashFlowRiskAnalyst:negative",
-                        "polarity": "negative",
-                        "summary": "CapEx may pressure near-term FCF.",
-                        "detail": "CapEx may pressure near-term FCF.",
-                        "impact_areas": ["fcf"],
-                        "source_ref": negative_source_ref,
-                        "confidence": 0.70,
-                    }
-                ],
+                "positive_evidence_ids": ["EarningsQualityAnalyst:positive"],
+                "negative_evidence_ids": ["CashFlowRiskAnalyst:negative"],
                 "eps_outlook": "EPS can improve if revenue growth and margin discipline continue.",
                 "eps_outlook_reason": (
                     "Revenue growth and margin discipline support EPS improvement, "

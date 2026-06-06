@@ -1,7 +1,7 @@
 from datetime import date
 
 from src.sec_company_facts import build_sec_company_facts_metrics, select_sec_fact_value
-from src.workflow_models import AvailabilityStatus
+from src.workflow_models import AvailabilityStatus, MetricPeriodRole
 
 
 def company_facts(rows_by_tag):
@@ -142,6 +142,64 @@ def test_build_sec_company_facts_metrics_normalizes_p0_and_derives_fcf():
     ocf_ref = next(ref for ref in metrics.source_refs if ref.metric_name == "operating_cash_flow")
     assert "method=ytd_difference" in (ocf_ref.title or "")
     assert "prior_end=2025-03-31" in (ocf_ref.title or "")
+
+
+def test_build_sec_company_facts_metrics_normalizes_comparison_periods():
+    facts = company_facts(
+        {
+            "Revenues": [
+                row(160, "2025-04-01", "2025-06-30"),
+                row(140, "2025-01-01", "2025-03-31", fp="Q1"),
+                row(120, "2024-04-01", "2024-06-30"),
+            ],
+            "NetCashProvidedByUsedInOperatingActivities": [
+                row(50, "2025-04-01", "2025-06-30"),
+                row(40, "2025-01-01", "2025-03-31", fp="Q1"),
+                row(30, "2024-04-01", "2024-06-30"),
+            ],
+            "PaymentsToAcquireProductiveAssets": [
+                row(10, "2025-04-01", "2025-06-30"),
+                row(8, "2025-01-01", "2025-03-31", fp="Q1"),
+                row(6, "2024-04-01", "2024-06-30"),
+            ],
+        }
+    )
+
+    metrics = build_sec_company_facts_metrics(
+        "NVDA",
+        "2025Q2",
+        target_period_end_date=date(2025, 6, 30),
+        facts=facts,
+        cik=1045810,
+    )
+
+    revenue_by_role = {
+        metric.period_role: metric.value
+        for metric in metrics.canonical_metrics
+        if metric.metric_name == "revenue"
+    }
+    fcf_by_role = {
+        metric.period_role: metric.value
+        for metric in metrics.derived_metrics
+        if metric.metric_name == "free_cash_flow"
+    }
+    assert revenue_by_role == {
+        MetricPeriodRole.ACTUAL: 160,
+        MetricPeriodRole.PREVIOUS_QUARTER: 140,
+        MetricPeriodRole.YEAR_AGO_QUARTER: 120,
+    }
+    assert fcf_by_role == {
+        MetricPeriodRole.ACTUAL: 40,
+        MetricPeriodRole.PREVIOUS_QUARTER: 32,
+        MetricPeriodRole.YEAR_AGO_QUARTER: 24,
+    }
+    assert {
+        ref.period_role for ref in metrics.source_refs if ref.metric_name == "operating_cash_flow"
+    } == {
+        MetricPeriodRole.ACTUAL,
+        MetricPeriodRole.PREVIOUS_QUARTER,
+        MetricPeriodRole.YEAR_AGO_QUARTER,
+    }
 
 
 def test_build_sec_company_facts_metrics_marks_unavailable_without_target_period():
