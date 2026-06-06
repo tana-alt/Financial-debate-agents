@@ -565,7 +565,7 @@ class ReviewWorkflow:
             free_cash_flow=metrics.free_cash_flow,
             capex=metrics.capex,
             guidance=metrics.guidance,
-            source_refs=list(metrics.source_refs),
+            source_refs=self._metric_value_source_refs(metrics),
             availability=list(metrics.availability),
             segment_metrics=list(metrics.segment_metrics),
             unmapped_metrics=list(metrics.unmapped_metrics),
@@ -579,6 +579,26 @@ class ReviewWorkflow:
                 "metric_conflicts": metrics.metric_conflicts,
             },
         )
+
+    def _metric_value_source_refs(self, metrics: FinancialMetrics) -> list[SourceRef]:
+        refs: list[SourceRef] = []
+        seen: set[str] = set()
+
+        def append(source_ref: SourceRef) -> None:
+            if source_ref.source_id in seen:
+                return
+            seen.add(source_ref.source_id)
+            refs.append(source_ref)
+
+        for metric in metrics.canonical_metrics:
+            append(metric.source_ref)
+        for metric in metrics.derived_metrics:
+            append(metric.source_ref)
+            for component_ref in metric.component_source_refs:
+                append(component_ref)
+        for source_ref in metrics.source_refs:
+            append(source_ref)
+        return refs
 
     def _calculate_surprise_pct(
         self,

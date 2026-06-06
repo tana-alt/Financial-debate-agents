@@ -10,12 +10,15 @@ from src import api
 from src.llm import LLMResponse
 from src.workflow import ReviewWorkflow, WorkflowValidationError
 from src.workflow_models import (
+    AvailabilityStatus,
+    DerivedMetricValue,
     DocumentSection,
     EvidenceItem,
     EvidencePolarity,
     FinancialMetrics,
     ImpactArea,
     MetricPeriodRole,
+    MetricValue,
     ReviewRequest,
     SourceManifestEntry,
     SourceRef,
@@ -663,6 +666,157 @@ def test_workflow_canonicalizes_source_manifest_metric_metadata():
     assert updated.source_ref.provider == "yfinance"
     assert updated.source_ref.provider_row_date == date(2025, 8, 28)
     assert updated.source_ref.period_role is MetricPeriodRole.ACTUAL
+
+
+def test_workflow_normalize_metrics_preserves_metric_value_source_refs():
+    def metric_ref(metric_name: str, provider: str = "sec_company_facts") -> SourceRef:
+        return SourceRef(
+            source_id=f"financial_api:NVDA:2025Q3:{provider}:{metric_name}",
+            source_type=SourceType.FINANCIAL_API,
+            metric_name=metric_name,
+            reported_period="2025Q3",
+            provider=provider,
+            period_role=MetricPeriodRole.ACTUAL,
+        )
+
+    revenue_ref = metric_ref("revenue")
+    eps_ref = metric_ref("eps", provider="yfinance")
+    operating_cash_flow_ref = metric_ref("operating_cash_flow")
+    capex_ref = metric_ref("capex")
+    derived_ref = SourceRef(
+        source_id="metric:NVDA:2025Q3:free_cash_flow:derived",
+        source_type=SourceType.DERIVED_METRIC,
+        metric_name="free_cash_flow",
+        reported_period="2025Q3",
+        period_role=MetricPeriodRole.ACTUAL,
+    )
+    metrics = FinancialMetrics(
+        ticker="NVDA",
+        fiscal_period="2025Q3",
+        revenue=35_000_000_000,
+        eps=0.81,
+        operating_cash_flow=15_000_000_000,
+        capex=-3_000_000_000,
+        free_cash_flow=12_000_000_000,
+        source_refs=[],
+        canonical_metrics=[
+            MetricValue(
+                metric_id="metric:NVDA:2025Q3:revenue",
+                metric_name="revenue",
+                value=35_000_000_000,
+                unit="USD",
+                fiscal_period="2025Q3",
+                period_role=MetricPeriodRole.ACTUAL,
+                source_ref=revenue_ref,
+            ),
+            MetricValue(
+                metric_id="metric:NVDA:2025Q3:eps",
+                metric_name="eps",
+                value=0.81,
+                unit="USD/share",
+                fiscal_period="2025Q3",
+                period_role=MetricPeriodRole.ACTUAL,
+                source_ref=eps_ref,
+            ),
+            MetricValue(
+                metric_id="metric:NVDA:2025Q3:operating_cash_flow",
+                metric_name="operating_cash_flow",
+                value=15_000_000_000,
+                unit="USD",
+                fiscal_period="2025Q3",
+                period_role=MetricPeriodRole.ACTUAL,
+                source_ref=operating_cash_flow_ref,
+            ),
+            MetricValue(
+                metric_id="metric:NVDA:2025Q3:capex",
+                metric_name="capex",
+                value=-3_000_000_000,
+                unit="USD",
+                fiscal_period="2025Q3",
+                period_role=MetricPeriodRole.ACTUAL,
+                source_ref=capex_ref,
+            ),
+        ],
+        derived_metrics=[
+            DerivedMetricValue(
+                metric_id="metric:NVDA:2025Q3:free_cash_flow",
+                metric_name="free_cash_flow",
+                value=12_000_000_000,
+                unit="USD",
+                fiscal_period="2025Q3",
+                period_role=MetricPeriodRole.ACTUAL,
+                source_ref=derived_ref,
+                component_metric_ids=[
+                    "metric:NVDA:2025Q3:operating_cash_flow",
+                    "metric:NVDA:2025Q3:capex",
+                ],
+                component_source_refs=[operating_cash_flow_ref, capex_ref],
+            )
+        ],
+    )
+
+    normalized = ReviewWorkflow(llm=FakeLLM())._normalize_metrics(metrics)
+
+    canonical_statuses = {
+        item.key: item.status
+        for item in normalized.availability
+        if item.key in {"revenue", "eps", "operating_cash_flow", "capex", "free_cash_flow"}
+    }
+    assert canonical_statuses == {
+        "revenue": AvailabilityStatus.AVAILABLE,
+        "eps": AvailabilityStatus.AVAILABLE,
+        "operating_cash_flow": AvailabilityStatus.AVAILABLE,
+        "capex": AvailabilityStatus.AVAILABLE,
+        "free_cash_flow": AvailabilityStatus.AVAILABLE,
+    }
+    assert {ref.source_id for ref in normalized.source_refs} >= {
+        revenue_ref.source_id,
+        eps_ref.source_id,
+        operating_cash_flow_ref.source_id,
+        capex_ref.source_id,
+    }
+
+
+def test_workflow_normalize_metrics_prefers_complete_metric_value_source_ref():
+    complete_revenue_ref = SourceRef(
+        source_id="financial_api:NVDA:2025Q3:sec_company_facts:revenue",
+        source_type=SourceType.FINANCIAL_API,
+        metric_name="revenue",
+        reported_period="2025Q3",
+        provider="sec_company_facts",
+        period_role=MetricPeriodRole.ACTUAL,
+    )
+    incomplete_revenue_ref = SourceRef(
+        source_id=complete_revenue_ref.source_id,
+        source_type=SourceType.FINANCIAL_API,
+        metric_name="revenue",
+    )
+    metrics = FinancialMetrics(
+        ticker="NVDA",
+        fiscal_period="2025Q3",
+        revenue=35_000_000_000,
+        source_refs=[incomplete_revenue_ref],
+        canonical_metrics=[
+            MetricValue(
+                metric_id="metric:NVDA:2025Q3:revenue",
+                metric_name="revenue",
+                value=35_000_000_000,
+                unit="USD",
+                fiscal_period="2025Q3",
+                period_role=MetricPeriodRole.ACTUAL,
+                source_ref=complete_revenue_ref,
+            )
+        ],
+    )
+
+    normalized = ReviewWorkflow(llm=FakeLLM())._normalize_metrics(metrics)
+
+    revenue_ref = next(ref for ref in normalized.source_refs if ref.metric_name == "revenue")
+    assert revenue_ref.provider == "sec_company_facts"
+    assert revenue_ref.reported_period == "2025Q3"
+    assert revenue_ref.period_role is MetricPeriodRole.ACTUAL
+    revenue_availability = next(item for item in normalized.availability if item.key == "revenue")
+    assert revenue_availability.status is AvailabilityStatus.AVAILABLE
 
 
 def test_workflow_rejects_metric_source_with_mismatched_period_role():
