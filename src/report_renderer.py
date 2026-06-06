@@ -191,6 +191,11 @@ class ReportRenderer:
             "|---|---|---|---|---|---:|---|",
         ]
         for finding in self._findings(brief):
+            reportable_missing = [
+                missing
+                for missing in finding.missing_data
+                if self._is_reportable_missing_text(missing)
+            ]
             lines.append(
                 "| {agent} | {stance} | {summary} | {key} | {counter} | {confidence:.2f} | {missing} |".format(
                     agent=self._cell(finding.agent_name),
@@ -199,7 +204,7 @@ class ReportRenderer:
                     key=self._cell(self._evidence_id_list(finding.key_evidence)),
                     counter=self._cell(self._evidence_id_list(finding.counter_evidence)),
                     confidence=float(finding.confidence),
-                    missing=self._cell("; ".join(finding.missing_data) or "-"),
+                    missing=self._cell("; ".join(reportable_missing) or "-"),
                 )
             )
         return lines

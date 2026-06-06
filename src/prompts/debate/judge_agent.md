@@ -116,7 +116,8 @@ missing data affects the verdict, explain that limitation inside `summary`,
 - Prefer `neutral` when Bull and Bear are close.
 - Prefer `neutral` when EPS outlook and FCF outlook point in opposite
   directions.
-- Important missing data should cap final confidence.
+- The Python workflow applies any final confidence cap from canonical SEC,
+  yfinance, or derived-metric missing statuses.
 
 ## Report Quality Addendum
 

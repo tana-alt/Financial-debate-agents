@@ -15,6 +15,7 @@ from src.report_quality_missing_data import confidence_cap, missing_data_lines
 from src.report_quality_numeric_grounding import NumericGroundingError, validate_numeric_grounding
 from src.report_quality_source_timing import classify_source_timing, source_timing_label
 from src.workflow_models import (
+    AvailabilityStatus,
     EvidenceItem,
     EvidencePolarity,
     ImpactArea,
@@ -74,6 +75,25 @@ def brief(**kwargs):
     }
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
+
+
+def missing_item(
+    missing_data_id="missing:item",
+    *,
+    source_type=SourceType.FILING,
+    status=AvailabilityStatus.REQUIRED_MISSING,
+    materiality="high",
+    blocks_verdict=False,
+):
+    return MissingDataItem(
+        missing_data_id=missing_data_id,
+        topic="Missing metric",
+        reason="Required canonical data was not available.",
+        materiality=materiality,
+        requested_source_type=source_type,
+        status=status,
+        blocks_verdict=blocks_verdict,
+    )
 
 
 def test_guidance_gate_accepts_metrics_guidance(monkeypatch):
@@ -230,17 +250,85 @@ def test_source_timing_unknown_candidate_uses_dates_when_available():
     )
 
 
-def test_missing_data_confidence_cap_material_caveat():
+def test_confidence_cap_one_canonical_required_missing_item_caps_to_0_8():
+    cap, reasons = confidence_cap(
+        brief(),
+        missing_data_items=[
+            missing_item(
+                "missing:yfinance-consensus",
+                source_type=SourceType.FINANCIAL_API,
+            )
+        ],
+    )
+
+    assert cap == 0.8
+    assert "canonical missing data: 1" in reasons
+
+
+def test_confidence_cap_two_canonical_required_missing_items_caps_to_0_6():
+    cap, reasons = confidence_cap(
+        brief(),
+        missing_data_items=[
+            missing_item("missing:sec-fcf", source_type=SourceType.FILING),
+            missing_item("missing:derived-fcf", source_type=SourceType.DERIVED_METRIC),
+        ],
+    )
+
+    assert cap == 0.6
+    assert "canonical missing data: 2" in reasons
+
+
+def test_confidence_cap_presentation_conflict_missing_item_does_not_cap():
+    cap, reasons = confidence_cap(
+        brief(),
+        missing_data_items=[
+            missing_item(
+                "missing:presentation-guidance",
+                source_type=SourceType.EARNINGS_PRESENTATION,
+                status=AvailabilityStatus.CONFLICTING,
+            )
+        ],
+    )
+
+    assert cap == 1.0
+    assert reasons == []
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        AvailabilityStatus.OPTIONAL_MISSING,
+        AvailabilityStatus.NOT_IN_CONTRACT,
+        AvailabilityStatus.OUT_OF_SCOPE_SOURCE_POLICY,
+    ],
+)
+def test_confidence_cap_canonical_non_cap_statuses_do_not_cap(status):
+    cap, reasons = confidence_cap(
+        brief(),
+        missing_data_items=[
+            missing_item(
+                "missing:non-cap-status",
+                source_type=SourceType.FILING,
+                status=status,
+            )
+        ],
+    )
+
+    assert cap == 1.0
+    assert reasons == []
+
+
+def test_raw_agent_missing_data_does_not_cap_by_default():
     b = brief(
         guidance_finding=finding("GuidanceAnalyst", missing=["guidance metrics were not routed"])
     )
     cap, reasons = confidence_cap(b)
-    assert cap <= 0.60
-    assert reasons
+    assert cap == 1.0
+    assert reasons == []
     assert "guidance" in "\n".join(missing_data_lines(b)).lower()
 
 
-def test_missing_data_items_cap_blocking_report_matrix_gap():
+def test_blocking_canonical_missing_data_still_uses_missing_count_ladder():
     b = brief()
     matrix_gaps = [
         MissingDataItem(
@@ -249,6 +337,7 @@ def test_missing_data_items_cap_blocking_report_matrix_gap():
             reason="The source set does not include a cash conversion bridge.",
             materiality="high",
             requested_source_type=SourceType.FILING,
+            status=AvailabilityStatus.REQUIRED_MISSING,
             blocks_verdict=True,
         )
     ]
@@ -256,8 +345,8 @@ def test_missing_data_items_cap_blocking_report_matrix_gap():
     cap, reasons = confidence_cap(b, missing_data_items=matrix_gaps)
     rendered = "\n".join(missing_data_lines(b, missing_data_items=matrix_gaps))
 
-    assert cap <= 0.45
-    assert "blocking missing data" in reasons
+    assert cap == 0.8
+    assert "canonical missing data: 1" in reasons
     assert "FCF bridge" in rendered
     assert "blocking_gap" in rendered
 

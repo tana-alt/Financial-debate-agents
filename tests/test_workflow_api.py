@@ -278,6 +278,11 @@ class ChangedJudgeSourceLLM(FakeLLM):
         )
 
 
+class HighConfidenceJudgeLLM(FakeLLM):
+    def _judge_json(self) -> str:
+        return super()._judge_json().replace('"confidence": 0.76', '"confidence": 0.95')
+
+
 def _source_ref(section_id: str) -> dict:
     return {
         "source_id": f"filing:{section_id}",
@@ -721,3 +726,38 @@ def test_reviews_endpoint_delegates_to_workflow():
     assert "# Earnings Review: NVDA 2025Q3" in body["markdown_report"]
     assert "## Evidence Matrix" in body["markdown_report"]
     assert "## Quality Gates" in body["markdown_report"]
+
+
+def test_reviews_endpoint_caps_confidence_from_financial_metrics_availability():
+    fake_llm = HighConfidenceJudgeLLM()
+
+    def override_workflow() -> ReviewWorkflow:
+        return ReviewWorkflow(llm=fake_llm)
+
+    payload = normalized_review_payload(dry_run=False)
+    payload["financial_metrics"]["availability"] = [
+        {
+            "key": "eps_consensus",
+            "status": "required_missing",
+            "reason": "yfinance consensus estimate was unavailable.",
+            "source_type": "financial_api",
+        },
+        {
+            "key": "presentation_guidance",
+            "status": "conflicting",
+            "reason": "Presentation guidance conflicted with canonical metrics.",
+            "source_type": "earnings_presentation",
+        },
+    ]
+
+    api.app.dependency_overrides[api.get_workflow] = override_workflow
+    try:
+        client = TestClient(api.app)
+        response = client.post("/reviews", json=payload)
+    finally:
+        api.app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["judge_decision"]["confidence"] == 0.8
+    assert body["claim_matrix"]["missing_data_items"] == []

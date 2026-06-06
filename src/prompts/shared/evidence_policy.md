@@ -71,25 +71,32 @@ If no meaningful counter evidence is available in the provided context:
 - keep `counter_evidence` empty only if the schema allows it
 - use `missing_data` only when the role output contract includes `missing_data`
 - otherwise describe material gaps inside allowed fields and lower `confidence`
-- cap `confidence` at `0.60`
+- lower role-level `confidence` when the schema requires it
 
 ## Evidence Quality
 
 - Prefer precomputed financial metrics for numeric claims.
-- Prefer filing, presentation, and transcript sections with stable `source_ref`.
+- Prefer SEC filing, earnings presentation, and routed precomputed metric
+  entries with stable `source_ref`.
 - Treat management narrative as a claim, not as proof.
 - Do not use one source as evidence for unrelated fields.
 - Do not turn absence of disclosure into a strong positive or negative claim.
 
-## Confidence Caps
+## Workflow Confidence Caps
 
-Use these caps unless a stricter schema-specific rule applies:
+The final verdict confidence cap is applied deterministically by the Python
+workflow. Do not invent global cap values from raw missing-data text.
 
-- one source type only: max `0.65`
-- weak or ambiguous source references: max `0.50`
-- important missing data: max `0.60`
-- no usable counter evidence: max `0.60`
-- conflicting EPS and FCF signals: max `0.70`
+The workflow counts cap-relevant canonical gaps from SEC, yfinance, and derived
+canonical metrics only:
+
+- no cap-relevant canonical gaps: max `1.00`
+- one cap-relevant canonical gap: max `0.80`
+- two or more cap-relevant canonical gaps: max `0.60`
+
+Presentation values are reference material. Presentation numeric gaps,
+presentation candidate conflicts, transcript/news/analyst-report gaps, and
+out-of-contract source gaps do not create final confidence caps.
 
 ## Numeric Grounding Policy
 
@@ -123,5 +130,5 @@ Classify external sources by timing before use:
 - `stale_external`: before the event and not tied to the reported quarter
 - `unknown`: date or timing cannot be verified
 
-The main verdict should prefer same-period primary company sources, filings,
-earnings releases, presentations, transcripts, and routed precomputed metrics.
+The main verdict should prefer same-period primary company sources, SEC
+filings, earnings presentations, and routed precomputed metrics.

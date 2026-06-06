@@ -47,6 +47,7 @@ from .workflow_models import (
     ReviewRequest,
     ReviewResponse,
     SourceManifestEntry,
+    SourceType,
     StepState,
     StepStatus,
     VerdictLabel,
@@ -247,23 +248,7 @@ class MarkdownRenderer:
         return uses
 
     def _missing_data_items(self, brief: AnalysisBrief) -> list[MissingDataItem]:
-        items: list[MissingDataItem] = []
-        for finding in (
-            brief.earnings_quality_finding,
-            brief.cash_flow_risk_finding,
-            brief.management_intent_finding,
-            brief.guidance_finding,
-        ):
-            for index, missing in enumerate(finding.missing_data, start=1):
-                items.append(
-                    MissingDataItem(
-                        missing_data_id=self._safe_id(f"missing:{finding.agent_name}:{index}"),
-                        topic=finding.agent_name,
-                        reason=missing,
-                        materiality="medium",
-                    )
-                )
-        return items
+        return []
 
     def _data_quality_flags(self, request: ReviewRequest) -> list[AvailabilityItem]:
         metrics = request.financial_metrics
@@ -292,8 +277,29 @@ class MarkdownRenderer:
                     if period_verified
                     else "Period verification: unverified"
                 ),
+                source_type=SourceType.FINANCIAL_API,
             )
         )
+        return items
+
+    def confidence_cap_items(self, request: ReviewRequest) -> list[MissingDataItem]:
+        metrics = request.financial_metrics
+        flags = metrics.availability if metrics is not None else []
+        items: list[MissingDataItem] = []
+        for flag in flags:
+            if flag.status in {AvailabilityStatus.AVAILABLE, AvailabilityStatus.COMPUTED}:
+                continue
+            items.append(
+                MissingDataItem(
+                    missing_data_id=self._safe_id(f"cap:{flag.key}"),
+                    topic=flag.key,
+                    reason=flag.reason,
+                    materiality="high" if flag.blocks_verdict else "medium",
+                    requested_source_type=flag.source_type,
+                    status=flag.status,
+                    blocks_verdict=flag.blocks_verdict,
+                )
+            )
         return items
 
     def _claim_id(self, item: EvidenceItem) -> str:
@@ -394,7 +400,12 @@ class ReviewWorkflow:
             lambda: self.judge_runner.run(request, metrics, brief, bull_case, bear_case),
         )
         decision = self.validator.validate_judge_decision(decision, brief)
-        decision = apply_confidence_caps(decision, brief)
+        cap_request = request.model_copy(update={"financial_metrics": metrics})
+        decision = apply_confidence_caps(
+            decision,
+            brief,
+            missing_data_items=self.renderer.confidence_cap_items(cap_request),
+        )
         validate_numeric_grounding([*decision.positive_evidence, *decision.negative_evidence])
 
         markdown = self._record_step(

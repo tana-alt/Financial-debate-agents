@@ -241,6 +241,7 @@ def test_renderer_outputs_final_section_order():
 
 def test_data_quality_flags_render_before_missing_data_and_filter_out_of_contract_gaps():
     request, brief, debate, decision, matrix = renderer_inputs()
+    brief.management_intent_finding.missing_data.append("Transcript was not supplied.")
     matrix.source_manifest.append(
         SourceManifestEntry(
             source_id="presentation:page-5",
@@ -274,10 +275,40 @@ def test_data_quality_flags_render_before_missing_data_and_filter_out_of_contrac
         "## Uncertainty And Missing Data"
     )
     data_quality = section(markdown, "Data Quality Flags")
+    agent_contribution = section(markdown, "Agent Contribution")
     uncertainty = section(markdown, "Uncertainty And Missing Data")
     assert "Input profile: yfinance_sec_presentation_tagged" in data_quality
+    assert "Transcript was not supplied" not in agent_contribution
+    assert "Forward guidance source was not routed" in agent_contribution
     assert "Transcript was not supplied" not in uncertainty
     assert "Transcript" not in uncertainty
+
+
+def test_workflow_matrix_does_not_promote_agent_missing_data_to_matrix_items():
+    request, brief, debate, decision, _matrix = renderer_inputs()
+
+    matrix = MarkdownRenderer().build_report_matrix(
+        request=request,
+        brief=brief,
+        debate=debate,
+        decision=decision,
+    )
+    markdown = ReportRenderer().render(
+        request=request,
+        brief=brief,
+        debate=debate,
+        decision=decision,
+        matrix=matrix,
+    )
+
+    assert matrix.missing_data_items == []
+    assert "Missing data items: 0" in section(markdown, "Quality Gates")
+    assert "No matrix-level missing data items were provided" in section(
+        markdown,
+        "Uncertainty And Missing Data",
+    )
+    assert "FCF bridge from operating cash flow" in section(markdown, "Agent Contribution")
+    assert "Forward guidance source was not routed" in section(markdown, "Agent Contribution")
 
 
 def test_evidence_matrix_distinguishes_contract_fields():
