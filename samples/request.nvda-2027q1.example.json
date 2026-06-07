@@ -1,0 +1,1336 @@
+{
+  "schema_version": "normalized-review-request.v1",
+  "request_id": "sample-nvda-2027q1",
+  "ticker": "NVDA",
+  "fiscal_period": "2027Q1",
+  "target_earnings_date": "2026-05-20",
+  "target_period_end_date": "2026-04-26",
+  "prior_fiscal_period": "2026Q4",
+  "input_profile": "yfinance_sec_presentation_tagged",
+  "financial_metrics": {
+    "ticker": "NVDA",
+    "fiscal_period": "2027Q1",
+    "target_earnings_date": "2026-05-20",
+    "target_period_end_date": "2026-04-26",
+    "prior_fiscal_period": "2026Q4",
+    "currency": "USD",
+    "input_profile": "yfinance_sec_presentation_tagged",
+    "revenue": 81615000000.0,
+    "eps": 1.87,
+    "eps_consensus": 1.77,
+    "eps_surprise_pct": 5.6497,
+    "operating_cash_flow": 50344000000.0,
+    "free_cash_flow": 48587000000.0,
+    "capex": -1757000000.0,
+    "source_refs": [
+      {
+        "as_of_date": "2026-05-20",
+        "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:revenue",
+        "metric_name": "revenue",
+        "reported_period": "2027Q1",
+        "provider": "sec_company_facts",
+        "period_role": "actual",
+        "provider_column_date": "2026-04-26",
+        "title": "SEC Company Facts Revenues period_role=actual method=direct_quarter form=10-Q end=2026-04-26 accn=0001045810-26-000052",
+        "source_type": "financial_api"
+      },
+      {
+        "as_of_date": "2026-05-20",
+        "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:operating_cash_flow",
+        "metric_name": "operating_cash_flow",
+        "reported_period": "2027Q1",
+        "provider": "sec_company_facts",
+        "period_role": "actual",
+        "provider_column_date": "2026-04-26",
+        "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=actual method=direct_quarter form=10-Q end=2026-04-26 accn=0001045810-26-000052",
+        "source_type": "financial_api"
+      },
+      {
+        "as_of_date": "2026-05-20",
+        "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:capex",
+        "metric_name": "capex",
+        "reported_period": "2027Q1",
+        "provider": "sec_company_facts",
+        "period_role": "actual",
+        "provider_column_date": "2026-04-26",
+        "title": "SEC Company Facts PaymentsToAcquireProductiveAssets period_role=actual method=direct_quarter form=10-Q end=2026-04-26 accn=0001045810-26-000052",
+        "source_type": "financial_api"
+      },
+      {
+        "source_id": "financial_api:NVDA:2027Q1:yf:eps",
+        "metric_name": "eps",
+        "reported_period": "2027Q1",
+        "provider": "yfinance",
+        "provider_row_date": "2026-05-20",
+        "period_role": "actual",
+        "title": "yfinance verified-period metric",
+        "source_type": "financial_api"
+      },
+      {
+        "source_id": "financial_api:NVDA:2027Q1:yf:consensus:eps_consensus",
+        "metric_name": "eps_consensus",
+        "reported_period": "2027Q1",
+        "provider": "yfinance",
+        "provider_row_date": "2026-05-20",
+        "period_role": "consensus",
+        "title": "yfinance verified-period metric",
+        "source_type": "financial_api"
+      },
+      {
+        "source_id": "financial_api:NVDA:2027Q1:yf:pq:eps",
+        "metric_name": "eps",
+        "reported_period": "2027Q1",
+        "provider": "yfinance",
+        "provider_row_date": "2026-02-25",
+        "period_role": "previous_quarter",
+        "title": "yfinance verified-period metric",
+        "source_type": "financial_api"
+      },
+      {
+        "source_id": "financial_api:NVDA:2027Q1:yf:ya:eps",
+        "metric_name": "eps",
+        "reported_period": "2027Q1",
+        "provider": "yfinance",
+        "provider_row_date": "2025-05-28",
+        "period_role": "year_ago_quarter",
+        "title": "yfinance verified-period metric",
+        "source_type": "financial_api"
+      },
+      {
+        "as_of_date": "2026-02-25",
+        "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:pq:revenue",
+        "metric_name": "revenue",
+        "reported_period": "2027Q1",
+        "provider": "sec_company_facts",
+        "period_role": "previous_quarter",
+        "provider_column_date": "2026-01-25",
+        "title": "SEC Company Facts Revenues period_role=previous_quarter method=ytd_difference form=10-K end=2026-01-25 accn=0001045810-26-000021 prior_end=2025-10-26 prior_accn=0001045810-25-000230",
+        "source_type": "financial_api"
+      },
+      {
+        "as_of_date": "2026-02-25",
+        "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:pq:operating_cash_flow",
+        "metric_name": "operating_cash_flow",
+        "reported_period": "2027Q1",
+        "provider": "sec_company_facts",
+        "period_role": "previous_quarter",
+        "provider_column_date": "2026-01-25",
+        "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=previous_quarter method=ytd_difference form=10-K end=2026-01-25 accn=0001045810-26-000021 prior_end=2025-10-26 prior_accn=0001045810-25-000230",
+        "source_type": "financial_api"
+      },
+      {
+        "as_of_date": "2026-02-25",
+        "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:pq:capex",
+        "metric_name": "capex",
+        "reported_period": "2027Q1",
+        "provider": "sec_company_facts",
+        "period_role": "previous_quarter",
+        "provider_column_date": "2026-01-25",
+        "title": "SEC Company Facts PaymentsToAcquireProductiveAssets period_role=previous_quarter method=ytd_difference form=10-K end=2026-01-25 accn=0001045810-26-000021 prior_end=2025-10-26 prior_accn=0001045810-25-000230",
+        "source_type": "financial_api"
+      },
+      {
+        "as_of_date": "2026-05-20",
+        "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:ya:revenue",
+        "metric_name": "revenue",
+        "reported_period": "2027Q1",
+        "provider": "sec_company_facts",
+        "period_role": "year_ago_quarter",
+        "provider_column_date": "2025-04-27",
+        "title": "SEC Company Facts Revenues period_role=year_ago_quarter method=direct_quarter form=10-Q end=2025-04-27 accn=0001045810-26-000052",
+        "source_type": "financial_api"
+      },
+      {
+        "as_of_date": "2026-05-20",
+        "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:ya:operating_cash_flow",
+        "metric_name": "operating_cash_flow",
+        "reported_period": "2027Q1",
+        "provider": "sec_company_facts",
+        "period_role": "year_ago_quarter",
+        "provider_column_date": "2025-04-27",
+        "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=year_ago_quarter method=direct_quarter form=10-Q end=2025-04-27 accn=0001045810-26-000052",
+        "source_type": "financial_api"
+      },
+      {
+        "as_of_date": "2026-05-20",
+        "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:ya:capex",
+        "metric_name": "capex",
+        "reported_period": "2027Q1",
+        "provider": "sec_company_facts",
+        "period_role": "year_ago_quarter",
+        "provider_column_date": "2025-04-27",
+        "title": "SEC Company Facts PaymentsToAcquireProductiveAssets period_role=year_ago_quarter method=direct_quarter form=10-Q end=2025-04-27 accn=0001045810-26-000052",
+        "source_type": "financial_api"
+      },
+      {
+        "source_id": "metric:NVDA:2027Q1:free_cash_flow:derived",
+        "metric_name": "free_cash_flow",
+        "reported_period": "2027Q1",
+        "period_role": "actual",
+        "title": "Derived free cash flow",
+        "source_type": "derived_metric"
+      },
+      {
+        "source_id": "metric:NVDA:2027Q1:previous_quarter:free_cash_flow:derived",
+        "metric_name": "free_cash_flow",
+        "reported_period": "2027Q1",
+        "period_role": "previous_quarter",
+        "title": "Derived free cash flow",
+        "source_type": "derived_metric"
+      },
+      {
+        "source_id": "metric:NVDA:2027Q1:year_ago_quarter:free_cash_flow:derived",
+        "metric_name": "free_cash_flow",
+        "reported_period": "2027Q1",
+        "period_role": "year_ago_quarter",
+        "title": "Derived free cash flow",
+        "source_type": "derived_metric"
+      }
+    ],
+    "canonical_metrics": [
+      {
+        "metric_id": "metric:NVDA:2027Q1:eps",
+        "metric_name": "eps",
+        "value": 1.87,
+        "unit": "USD/share",
+        "fiscal_period": "2027Q1",
+        "period_role": "actual",
+        "source_ref": {
+          "source_id": "financial_api:NVDA:2027Q1:yf:eps",
+          "metric_name": "eps",
+          "reported_period": "2027Q1",
+          "provider": "yfinance",
+          "provider_row_date": "2026-05-20",
+          "period_role": "actual",
+          "title": "yfinance verified-period metric",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:NVDA:2027Q1:revenue",
+        "metric_name": "revenue",
+        "value": 81615000000.0,
+        "unit": "USD",
+        "fiscal_period": "2027Q1",
+        "period_role": "actual",
+        "source_ref": {
+          "as_of_date": "2026-05-20",
+          "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:revenue",
+          "metric_name": "revenue",
+          "reported_period": "2027Q1",
+          "provider": "sec_company_facts",
+          "period_role": "actual",
+          "provider_column_date": "2026-04-26",
+          "title": "SEC Company Facts Revenues period_role=actual method=direct_quarter form=10-Q end=2026-04-26 accn=0001045810-26-000052",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:NVDA:2027Q1:operating_cash_flow",
+        "metric_name": "operating_cash_flow",
+        "value": 50344000000.0,
+        "unit": "USD",
+        "fiscal_period": "2027Q1",
+        "period_role": "actual",
+        "source_ref": {
+          "as_of_date": "2026-05-20",
+          "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:operating_cash_flow",
+          "metric_name": "operating_cash_flow",
+          "reported_period": "2027Q1",
+          "provider": "sec_company_facts",
+          "period_role": "actual",
+          "provider_column_date": "2026-04-26",
+          "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=actual method=direct_quarter form=10-Q end=2026-04-26 accn=0001045810-26-000052",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:NVDA:2027Q1:capex",
+        "metric_name": "capex",
+        "value": -1757000000.0,
+        "unit": "USD",
+        "fiscal_period": "2027Q1",
+        "period_role": "actual",
+        "source_ref": {
+          "as_of_date": "2026-05-20",
+          "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:capex",
+          "metric_name": "capex",
+          "reported_period": "2027Q1",
+          "provider": "sec_company_facts",
+          "period_role": "actual",
+          "provider_column_date": "2026-04-26",
+          "title": "SEC Company Facts PaymentsToAcquireProductiveAssets period_role=actual method=direct_quarter form=10-Q end=2026-04-26 accn=0001045810-26-000052",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:NVDA:2027Q1:previous_quarter:eps",
+        "metric_name": "eps",
+        "value": 1.62,
+        "unit": "USD/share",
+        "fiscal_period": "2027Q1",
+        "period_role": "previous_quarter",
+        "source_ref": {
+          "source_id": "financial_api:NVDA:2027Q1:yf:pq:eps",
+          "metric_name": "eps",
+          "reported_period": "2027Q1",
+          "provider": "yfinance",
+          "provider_row_date": "2026-02-25",
+          "period_role": "previous_quarter",
+          "title": "yfinance verified-period metric",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:NVDA:2027Q1:previous_quarter:revenue",
+        "metric_name": "revenue",
+        "value": 68127000000.0,
+        "unit": "USD",
+        "fiscal_period": "2027Q1",
+        "period_role": "previous_quarter",
+        "source_ref": {
+          "as_of_date": "2026-02-25",
+          "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:pq:revenue",
+          "metric_name": "revenue",
+          "reported_period": "2027Q1",
+          "provider": "sec_company_facts",
+          "period_role": "previous_quarter",
+          "provider_column_date": "2026-01-25",
+          "title": "SEC Company Facts Revenues period_role=previous_quarter method=ytd_difference form=10-K end=2026-01-25 accn=0001045810-26-000021 prior_end=2025-10-26 prior_accn=0001045810-25-000230",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:NVDA:2027Q1:previous_quarter:operating_cash_flow",
+        "metric_name": "operating_cash_flow",
+        "value": 36188000000.0,
+        "unit": "USD",
+        "fiscal_period": "2027Q1",
+        "period_role": "previous_quarter",
+        "source_ref": {
+          "as_of_date": "2026-02-25",
+          "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:pq:operating_cash_flow",
+          "metric_name": "operating_cash_flow",
+          "reported_period": "2027Q1",
+          "provider": "sec_company_facts",
+          "period_role": "previous_quarter",
+          "provider_column_date": "2026-01-25",
+          "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=previous_quarter method=ytd_difference form=10-K end=2026-01-25 accn=0001045810-26-000021 prior_end=2025-10-26 prior_accn=0001045810-25-000230",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:NVDA:2027Q1:previous_quarter:capex",
+        "metric_name": "capex",
+        "value": -1284000000.0,
+        "unit": "USD",
+        "fiscal_period": "2027Q1",
+        "period_role": "previous_quarter",
+        "source_ref": {
+          "as_of_date": "2026-02-25",
+          "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:pq:capex",
+          "metric_name": "capex",
+          "reported_period": "2027Q1",
+          "provider": "sec_company_facts",
+          "period_role": "previous_quarter",
+          "provider_column_date": "2026-01-25",
+          "title": "SEC Company Facts PaymentsToAcquireProductiveAssets period_role=previous_quarter method=ytd_difference form=10-K end=2026-01-25 accn=0001045810-26-000021 prior_end=2025-10-26 prior_accn=0001045810-25-000230",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:NVDA:2027Q1:year_ago_quarter:eps",
+        "metric_name": "eps",
+        "value": 0.81,
+        "unit": "USD/share",
+        "fiscal_period": "2027Q1",
+        "period_role": "year_ago_quarter",
+        "source_ref": {
+          "source_id": "financial_api:NVDA:2027Q1:yf:ya:eps",
+          "metric_name": "eps",
+          "reported_period": "2027Q1",
+          "provider": "yfinance",
+          "provider_row_date": "2025-05-28",
+          "period_role": "year_ago_quarter",
+          "title": "yfinance verified-period metric",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:NVDA:2027Q1:year_ago_quarter:revenue",
+        "metric_name": "revenue",
+        "value": 44062000000.0,
+        "unit": "USD",
+        "fiscal_period": "2027Q1",
+        "period_role": "year_ago_quarter",
+        "source_ref": {
+          "as_of_date": "2026-05-20",
+          "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:ya:revenue",
+          "metric_name": "revenue",
+          "reported_period": "2027Q1",
+          "provider": "sec_company_facts",
+          "period_role": "year_ago_quarter",
+          "provider_column_date": "2025-04-27",
+          "title": "SEC Company Facts Revenues period_role=year_ago_quarter method=direct_quarter form=10-Q end=2025-04-27 accn=0001045810-26-000052",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:NVDA:2027Q1:year_ago_quarter:operating_cash_flow",
+        "metric_name": "operating_cash_flow",
+        "value": 27414000000.0,
+        "unit": "USD",
+        "fiscal_period": "2027Q1",
+        "period_role": "year_ago_quarter",
+        "source_ref": {
+          "as_of_date": "2026-05-20",
+          "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:ya:operating_cash_flow",
+          "metric_name": "operating_cash_flow",
+          "reported_period": "2027Q1",
+          "provider": "sec_company_facts",
+          "period_role": "year_ago_quarter",
+          "provider_column_date": "2025-04-27",
+          "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=year_ago_quarter method=direct_quarter form=10-Q end=2025-04-27 accn=0001045810-26-000052",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:NVDA:2027Q1:year_ago_quarter:capex",
+        "metric_name": "capex",
+        "value": -1227000000.0,
+        "unit": "USD",
+        "fiscal_period": "2027Q1",
+        "period_role": "year_ago_quarter",
+        "source_ref": {
+          "as_of_date": "2026-05-20",
+          "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:ya:capex",
+          "metric_name": "capex",
+          "reported_period": "2027Q1",
+          "provider": "sec_company_facts",
+          "period_role": "year_ago_quarter",
+          "provider_column_date": "2025-04-27",
+          "title": "SEC Company Facts PaymentsToAcquireProductiveAssets period_role=year_ago_quarter method=direct_quarter form=10-Q end=2025-04-27 accn=0001045810-26-000052",
+          "source_type": "financial_api"
+        }
+      }
+    ],
+    "derived_metrics": [
+      {
+        "metric_id": "metric:NVDA:2027Q1:free_cash_flow",
+        "metric_name": "free_cash_flow",
+        "value": 48587000000.0,
+        "unit": "USD",
+        "fiscal_period": "2027Q1",
+        "period_role": "actual",
+        "source_ref": {
+          "source_id": "metric:NVDA:2027Q1:free_cash_flow:derived",
+          "metric_name": "free_cash_flow",
+          "reported_period": "2027Q1",
+          "period_role": "actual",
+          "title": "Derived free cash flow",
+          "source_type": "derived_metric"
+        },
+        "component_metric_ids": [
+          "metric:NVDA:2027Q1:operating_cash_flow",
+          "metric:NVDA:2027Q1:capex"
+        ],
+        "component_source_refs": [
+          {
+            "as_of_date": "2026-05-20",
+            "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:operating_cash_flow",
+            "metric_name": "operating_cash_flow",
+            "reported_period": "2027Q1",
+            "provider": "sec_company_facts",
+            "period_role": "actual",
+            "provider_column_date": "2026-04-26",
+            "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=actual method=direct_quarter form=10-Q end=2026-04-26 accn=0001045810-26-000052",
+            "source_type": "financial_api"
+          },
+          {
+            "as_of_date": "2026-05-20",
+            "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:capex",
+            "metric_name": "capex",
+            "reported_period": "2027Q1",
+            "provider": "sec_company_facts",
+            "period_role": "actual",
+            "provider_column_date": "2026-04-26",
+            "title": "SEC Company Facts PaymentsToAcquireProductiveAssets period_role=actual method=direct_quarter form=10-Q end=2026-04-26 accn=0001045810-26-000052",
+            "source_type": "financial_api"
+          }
+        ]
+      },
+      {
+        "metric_id": "metric:NVDA:2027Q1:previous_quarter:free_cash_flow",
+        "metric_name": "free_cash_flow",
+        "value": 34904000000.0,
+        "unit": "USD",
+        "fiscal_period": "2027Q1",
+        "period_role": "previous_quarter",
+        "source_ref": {
+          "source_id": "metric:NVDA:2027Q1:previous_quarter:free_cash_flow:derived",
+          "metric_name": "free_cash_flow",
+          "reported_period": "2027Q1",
+          "period_role": "previous_quarter",
+          "title": "Derived free cash flow",
+          "source_type": "derived_metric"
+        },
+        "component_metric_ids": [
+          "metric:NVDA:2027Q1:previous_quarter:operating_cash_flow",
+          "metric:NVDA:2027Q1:previous_quarter:capex"
+        ],
+        "component_source_refs": [
+          {
+            "as_of_date": "2026-02-25",
+            "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:pq:operating_cash_flow",
+            "metric_name": "operating_cash_flow",
+            "reported_period": "2027Q1",
+            "provider": "sec_company_facts",
+            "period_role": "previous_quarter",
+            "provider_column_date": "2026-01-25",
+            "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=previous_quarter method=ytd_difference form=10-K end=2026-01-25 accn=0001045810-26-000021 prior_end=2025-10-26 prior_accn=0001045810-25-000230",
+            "source_type": "financial_api"
+          },
+          {
+            "as_of_date": "2026-02-25",
+            "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:pq:capex",
+            "metric_name": "capex",
+            "reported_period": "2027Q1",
+            "provider": "sec_company_facts",
+            "period_role": "previous_quarter",
+            "provider_column_date": "2026-01-25",
+            "title": "SEC Company Facts PaymentsToAcquireProductiveAssets period_role=previous_quarter method=ytd_difference form=10-K end=2026-01-25 accn=0001045810-26-000021 prior_end=2025-10-26 prior_accn=0001045810-25-000230",
+            "source_type": "financial_api"
+          }
+        ]
+      },
+      {
+        "metric_id": "metric:NVDA:2027Q1:year_ago_quarter:free_cash_flow",
+        "metric_name": "free_cash_flow",
+        "value": 26187000000.0,
+        "unit": "USD",
+        "fiscal_period": "2027Q1",
+        "period_role": "year_ago_quarter",
+        "source_ref": {
+          "source_id": "metric:NVDA:2027Q1:year_ago_quarter:free_cash_flow:derived",
+          "metric_name": "free_cash_flow",
+          "reported_period": "2027Q1",
+          "period_role": "year_ago_quarter",
+          "title": "Derived free cash flow",
+          "source_type": "derived_metric"
+        },
+        "component_metric_ids": [
+          "metric:NVDA:2027Q1:year_ago_quarter:operating_cash_flow",
+          "metric:NVDA:2027Q1:year_ago_quarter:capex"
+        ],
+        "component_source_refs": [
+          {
+            "as_of_date": "2026-05-20",
+            "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:ya:operating_cash_flow",
+            "metric_name": "operating_cash_flow",
+            "reported_period": "2027Q1",
+            "provider": "sec_company_facts",
+            "period_role": "year_ago_quarter",
+            "provider_column_date": "2025-04-27",
+            "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=year_ago_quarter method=direct_quarter form=10-Q end=2025-04-27 accn=0001045810-26-000052",
+            "source_type": "financial_api"
+          },
+          {
+            "as_of_date": "2026-05-20",
+            "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:ya:capex",
+            "metric_name": "capex",
+            "reported_period": "2027Q1",
+            "provider": "sec_company_facts",
+            "period_role": "year_ago_quarter",
+            "provider_column_date": "2025-04-27",
+            "title": "SEC Company Facts PaymentsToAcquireProductiveAssets period_role=year_ago_quarter method=direct_quarter form=10-Q end=2025-04-27 accn=0001045810-26-000052",
+            "source_type": "financial_api"
+          }
+        ]
+      }
+    ],
+    "availability": [
+      {
+        "key": "input_profile",
+        "status": "available",
+        "reason": "Input profile: yfinance_sec_presentation_tagged",
+        "blocks_verdict": false
+      },
+      {
+        "key": "revenue",
+        "status": "available",
+        "reason": "Required canonical metric revenue is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "eps",
+        "status": "available",
+        "reason": "Required canonical metric eps is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "operating_cash_flow",
+        "status": "available",
+        "reason": "Required canonical metric operating_cash_flow is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "capex",
+        "status": "available",
+        "reason": "Required canonical metric capex is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "free_cash_flow",
+        "status": "available",
+        "reason": "Required canonical metric free_cash_flow is available.",
+        "source_type": "derived_metric",
+        "blocks_verdict": false
+      },
+      {
+        "key": "previous_quarter:revenue",
+        "status": "available",
+        "reason": "Required canonical metric previous_quarter:revenue is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "previous_quarter:eps",
+        "status": "available",
+        "reason": "Required canonical metric previous_quarter:eps is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "previous_quarter:operating_cash_flow",
+        "status": "available",
+        "reason": "Required canonical metric previous_quarter:operating_cash_flow is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "previous_quarter:capex",
+        "status": "available",
+        "reason": "Required canonical metric previous_quarter:capex is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "previous_quarter:free_cash_flow",
+        "status": "available",
+        "reason": "Required canonical metric previous_quarter:free_cash_flow is available.",
+        "source_type": "derived_metric",
+        "blocks_verdict": false
+      },
+      {
+        "key": "year_ago_quarter:revenue",
+        "status": "available",
+        "reason": "Required canonical metric year_ago_quarter:revenue is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "year_ago_quarter:eps",
+        "status": "available",
+        "reason": "Required canonical metric year_ago_quarter:eps is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "year_ago_quarter:operating_cash_flow",
+        "status": "available",
+        "reason": "Required canonical metric year_ago_quarter:operating_cash_flow is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "year_ago_quarter:capex",
+        "status": "available",
+        "reason": "Required canonical metric year_ago_quarter:capex is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "year_ago_quarter:free_cash_flow",
+        "status": "available",
+        "reason": "Required canonical metric year_ago_quarter:free_cash_flow is available.",
+        "source_type": "derived_metric",
+        "blocks_verdict": false
+      },
+      {
+        "key": "period_verification",
+        "status": "available",
+        "reason": "Period verification: verified",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      }
+    ]
+  },
+  "document_sections": [
+    {
+      "section_id": "nvda-f1q27-presentation:p1:section-1",
+      "source_ref": {
+        "source_id": "nvda-f1q27-presentation:p1:section-1",
+        "document_id": "nvda-f1q27-presentation",
+        "page": 1,
+        "section_id": "nvda-f1q27-presentation:p1:section-1",
+        "title": "NVDA F1Q27 quarterly presentation",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "NVDA F1Q27 quarterly presentation - page 1",
+      "text": "NVDA F1Q27 quarterly presentation source section retained for source-manifest traceability.",
+      "start_page": 1,
+      "end_page": 1
+    },
+    {
+      "section_id": "nvda-f1q27-presentation:p2:section-1",
+      "source_ref": {
+        "source_id": "nvda-f1q27-presentation:p2:section-1",
+        "document_id": "nvda-f1q27-presentation",
+        "page": 2,
+        "section_id": "nvda-f1q27-presentation:p2:section-1",
+        "title": "NVDA F1Q27 quarterly presentation",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "NVDA F1Q27 quarterly presentation - page 2",
+      "text": "- 会社は供給、在庫、製造・流通、第三者依存などを重要な不確実性として明示している。\nプレゼンテーションは forward-looking statements に関する注意書きとして、第三者製造への依存、需要変化、技術競争、製品の市場受容、設計/製造/ソフトウェア不具合、統合時の性能低下などを列挙している。これは経営意図の実行面に重要な制約があることを会社自身が認めている材料で、近中期のEPS/FCF見通しにリスクを与える。\nQuote: NVIDIA’s reliance on third parties to manufacture, assemble, package and test NVIDIA’s products; ... supply and demand for NVIDIA’s products ... including inventory, production and distribution\n- 会社自身が供給・需要・製造依存などの広い不確実性を明示\nPresentation は供給と需要、第三者製造依存、製品採用、競争、技術変化などが結果を左右し得ると記載しており、EPS の継続改善には実行リスクが残ります。\n- forward-looking注記が広く、実現には複数条件が必要\n会社は供給制約、第三者依存、競争、需要変動、製品・ソフトウェア不具合など多数のリスクを列挙しており、見通し達成には外部条件が重要です。\nQuote: subject to risks and uncertainties that could cause results to be materially different than expectations",
+      "start_page": 2,
+      "end_page": 2
+    },
+    {
+      "section_id": "nvda-f1q27-presentation:p3:section-1",
+      "source_ref": {
+        "source_id": "nvda-f1q27-presentation:p3:section-1",
+        "document_id": "nvda-f1q27-presentation",
+        "page": 3,
+        "section_id": "nvda-f1q27-presentation:p3:section-1",
+        "title": "NVDA F1Q27 quarterly presentation",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "NVDA F1Q27 quarterly presentation - page 3",
+      "text": "NVDA F1Q27 quarterly presentation source section retained for source-manifest traceability.",
+      "start_page": 3,
+      "end_page": 3
+    },
+    {
+      "section_id": "nvda-f1q27-presentation:p4:section-1",
+      "source_ref": {
+        "source_id": "nvda-f1q27-presentation:p4:section-1",
+        "document_id": "nvda-f1q27-presentation",
+        "page": 4,
+        "section_id": "nvda-f1q27-presentation:p4:section-1",
+        "title": "NVDA F1Q27 quarterly presentation",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "NVDA F1Q27 quarterly presentation - page 4",
+      "text": "NVDA F1Q27 quarterly presentation source section retained for source-manifest traceability.",
+      "start_page": 4,
+      "end_page": 4
+    },
+    {
+      "section_id": "nvda-f1q27-presentation:p5:section-1",
+      "source_ref": {
+        "source_id": "nvda-f1q27-presentation:p5:section-1",
+        "document_id": "nvda-f1q27-presentation",
+        "page": 5,
+        "section_id": "nvda-f1q27-presentation:p5:section-1",
+        "title": "NVDA F1Q27 quarterly presentation",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "NVDA F1Q27 quarterly presentation - page 5",
+      "text": "- 粗利率改善の一部は前年の在庫関連一時要因の反動\nPresentation は、粗利率の前年比改善が主として前年の 45億USD の H20 excess inventory charge に伴う在庫引当減少によるものだと説明しています。したがって、粗利率改善の一部は継続的な改善というよりベース効果の色合いがあります。",
+      "start_page": 5,
+      "end_page": 5
+    },
+    {
+      "section_id": "nvda-f1q27-presentation:p6:section-1",
+      "source_ref": {
+        "source_id": "nvda-f1q27-presentation:p6:section-1",
+        "document_id": "nvda-f1q27-presentation",
+        "page": 6,
+        "section_id": "nvda-f1q27-presentation:p6:section-1",
+        "title": "NVDA F1Q27 quarterly presentation",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "NVDA F1Q27 quarterly presentation - page 6",
+      "text": "NVDA F1Q27 quarterly presentation source section retained for source-manifest traceability.",
+      "start_page": 6,
+      "end_page": 6
+    },
+    {
+      "section_id": "nvda-f1q27-presentation:p7:section-1",
+      "source_ref": {
+        "source_id": "nvda-f1q27-presentation:p7:section-1",
+        "document_id": "nvda-f1q27-presentation",
+        "page": 7,
+        "section_id": "nvda-f1q27-presentation:p7:section-1",
+        "title": "NVDA F1Q27 quarterly presentation",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "NVDA F1Q27 quarterly presentation - page 7",
+      "text": "NVDA F1Q27 quarterly presentation source section retained for source-manifest traceability.",
+      "start_page": 7,
+      "end_page": 7
+    },
+    {
+      "section_id": "nvda-f1q27-presentation:p8:section-1",
+      "source_ref": {
+        "source_id": "nvda-f1q27-presentation:p8:section-1",
+        "document_id": "nvda-f1q27-presentation",
+        "page": 8,
+        "section_id": "nvda-f1q27-presentation:p8:section-1",
+        "title": "NVDA F1Q27 quarterly presentation",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "NVDA F1Q27 quarterly presentation - page 8",
+      "text": "NVDA F1Q27 quarterly presentation source section retained for source-manifest traceability.",
+      "start_page": 8,
+      "end_page": 8
+    },
+    {
+      "section_id": "nvda-f1q27-presentation:p9:section-1",
+      "source_ref": {
+        "source_id": "nvda-f1q27-presentation:p9:section-1",
+        "document_id": "nvda-f1q27-presentation",
+        "page": 9,
+        "section_id": "nvda-f1q27-presentation:p9:section-1",
+        "title": "NVDA F1Q27 quarterly presentation",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "NVDA F1Q27 quarterly presentation - page 9",
+      "text": "NVDA F1Q27 quarterly presentation source section retained for source-manifest traceability.",
+      "start_page": 9,
+      "end_page": 9
+    },
+    {
+      "section_id": "nvda-f1q27-presentation:p10:section-1",
+      "source_ref": {
+        "source_id": "nvda-f1q27-presentation:p10:section-1",
+        "document_id": "nvda-f1q27-presentation",
+        "page": 10,
+        "section_id": "nvda-f1q27-presentation:p10:section-1",
+        "title": "NVDA F1Q27 quarterly presentation",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "NVDA F1Q27 quarterly presentation - page 10",
+      "text": "- 非GAAP粗利率と営業利益率が高く、営業レバレッジを示唆\nPresentation では Q1 FY27 の非GAAP粗利率が 75.0%、非GAAP営業利益が 538億ドル、非GAAP営業費用が 74億ドルと示され、売上成長に対して利益成長が大きい構図です。",
+      "start_page": 10,
+      "end_page": 10
+    },
+    {
+      "section_id": "nvda-f1q27-presentation:p11:section-1",
+      "source_ref": {
+        "source_id": "nvda-f1q27-presentation:p11:section-1",
+        "document_id": "nvda-f1q27-presentation",
+        "page": 11,
+        "section_id": "nvda-f1q27-presentation:p11:section-1",
+        "title": "NVDA F1Q27 quarterly presentation",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "NVDA F1Q27 quarterly presentation - page 11",
+      "text": "- Q2 FY27の見通し前提が明示されている\nQ2 FY27について、売上91.0B USD（±2%）、非GAAP粗利率75.0%（±50bp）、営業費用8.3B USD程度、年率税率16%-18%が示されており、見通し条件が資料上かなり明確です。\nQuote: Q2 FY27 Revenue $91.0 billion* + / - 2%\n- China売上を前提にしない注意書きがある\n『Outlook does not assume any Data Center compute revenue from China』と明記されており、見通しが中国需要・規制要因に左右されうることを会社自身が示しています。\nQuote: *Outlook does not assume any Data Center compute revenue from China\n- Q2 見通しは中国向け Data Center revenue を前提にしていない\nPresentation の Q2 FY27 outlook は「Outlook does not assume any Data Center compute revenue from China」と明記しており、将来の売上・EPS に関して中国要因の不確実性があることを示します。",
+      "start_page": 11,
+      "end_page": 11
+    },
+    {
+      "section_id": "nvda-f1q27-presentation:p12:section-1",
+      "source_ref": {
+        "source_id": "nvda-f1q27-presentation:p12:section-1",
+        "document_id": "nvda-f1q27-presentation",
+        "page": 12,
+        "section_id": "nvda-f1q27-presentation:p12:section-1",
+        "title": "NVDA F1Q27 quarterly presentation",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "NVDA F1Q27 quarterly presentation - page 12",
+      "text": "NVDA F1Q27 quarterly presentation source section retained for source-manifest traceability.",
+      "start_page": 12,
+      "end_page": 12
+    },
+    {
+      "section_id": "nvda-f1q27-presentation:p13:section-1",
+      "source_ref": {
+        "source_id": "nvda-f1q27-presentation:p13:section-1",
+        "document_id": "nvda-f1q27-presentation",
+        "page": 13,
+        "section_id": "nvda-f1q27-presentation:p13:section-1",
+        "title": "NVDA F1Q27 quarterly presentation",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "NVDA F1Q27 quarterly presentation - page 13",
+      "text": "- 非GAAP EPS と GAAP EPS の差が大きい\nPresentation では Q1 FY27 の非GAAP EPS は 1.87 USD/share だが、GAAP EPS は 2.39 USD/share と表示され、調整項目の影響が大きいことを示します。EPS の質を評価する際は、調整要因の存在を考慮する必要があります。",
+      "start_page": 13,
+      "end_page": 13
+    },
+    {
+      "section_id": "nvda-f1q27-presentation:p14:section-1",
+      "source_ref": {
+        "source_id": "nvda-f1q27-presentation:p14:section-1",
+        "document_id": "nvda-f1q27-presentation",
+        "page": 14,
+        "section_id": "nvda-f1q27-presentation:p14:section-1",
+        "title": "NVDA F1Q27 quarterly presentation",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "NVDA F1Q27 quarterly presentation - page 14",
+      "text": "NVDA F1Q27 quarterly presentation source section retained for source-manifest traceability.",
+      "start_page": 14,
+      "end_page": 14
+    },
+    {
+      "section_id": "nvda-f1q27-presentation:p15:section-1",
+      "source_ref": {
+        "source_id": "nvda-f1q27-presentation:p15:section-1",
+        "document_id": "nvda-f1q27-presentation",
+        "page": 15,
+        "section_id": "nvda-f1q27-presentation:p15:section-1",
+        "title": "NVDA F1Q27 quarterly presentation",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "NVDA F1Q27 quarterly presentation - page 15",
+      "text": "- consensus差分が空で比較不能\nconsensus_deltasが空で、guidanceと市場予想の乖離を示すprecomputed差分が提供されていません。したがって、保守的か強気かの判定は限定的です。\nQuote: Reconciliation of Non-GAAP to GAAP Financial Measures (contd.)",
+      "start_page": 15,
+      "end_page": 15
+    },
+    {
+      "section_id": "nvda-f1q27-presentation:p16:section-1",
+      "source_ref": {
+        "source_id": "nvda-f1q27-presentation:p16:section-1",
+        "document_id": "nvda-f1q27-presentation",
+        "page": 16,
+        "section_id": "nvda-f1q27-presentation:p16:section-1",
+        "title": "NVDA F1Q27 quarterly presentation",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "NVDA F1Q27 quarterly presentation - page 16",
+      "text": "NVDA F1Q27 quarterly presentation source section retained for source-manifest traceability.",
+      "start_page": 16,
+      "end_page": 16
+    }
+  ],
+  "availability": [
+    {
+      "key": "input_profile",
+      "status": "available",
+      "reason": "Input profile: yfinance_sec_presentation_tagged",
+      "blocks_verdict": false
+    },
+    {
+      "key": "revenue",
+      "status": "available",
+      "reason": "Required canonical metric revenue is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "eps",
+      "status": "available",
+      "reason": "Required canonical metric eps is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "operating_cash_flow",
+      "status": "available",
+      "reason": "Required canonical metric operating_cash_flow is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "capex",
+      "status": "available",
+      "reason": "Required canonical metric capex is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "free_cash_flow",
+      "status": "available",
+      "reason": "Required canonical metric free_cash_flow is available.",
+      "source_type": "derived_metric",
+      "blocks_verdict": false
+    },
+    {
+      "key": "previous_quarter:revenue",
+      "status": "available",
+      "reason": "Required canonical metric previous_quarter:revenue is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "previous_quarter:eps",
+      "status": "available",
+      "reason": "Required canonical metric previous_quarter:eps is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "previous_quarter:operating_cash_flow",
+      "status": "available",
+      "reason": "Required canonical metric previous_quarter:operating_cash_flow is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "previous_quarter:capex",
+      "status": "available",
+      "reason": "Required canonical metric previous_quarter:capex is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "previous_quarter:free_cash_flow",
+      "status": "available",
+      "reason": "Required canonical metric previous_quarter:free_cash_flow is available.",
+      "source_type": "derived_metric",
+      "blocks_verdict": false
+    },
+    {
+      "key": "year_ago_quarter:revenue",
+      "status": "available",
+      "reason": "Required canonical metric year_ago_quarter:revenue is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "year_ago_quarter:eps",
+      "status": "available",
+      "reason": "Required canonical metric year_ago_quarter:eps is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "year_ago_quarter:operating_cash_flow",
+      "status": "available",
+      "reason": "Required canonical metric year_ago_quarter:operating_cash_flow is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "year_ago_quarter:capex",
+      "status": "available",
+      "reason": "Required canonical metric year_ago_quarter:capex is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "year_ago_quarter:free_cash_flow",
+      "status": "available",
+      "reason": "Required canonical metric year_ago_quarter:free_cash_flow is available.",
+      "source_type": "derived_metric",
+      "blocks_verdict": false
+    },
+    {
+      "key": "period_verification",
+      "status": "available",
+      "reason": "Period verification: verified",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    }
+  ],
+  "source_manifest": [
+    {
+      "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:revenue",
+      "source_type": "financial_api",
+      "title": "SEC Company Facts Revenues period_role=actual method=direct_quarter form=10-Q end=2026-04-26 accn=0001045810-26-000052",
+      "metric_name": "revenue",
+      "reported_period": "2027Q1",
+      "as_of_date": "2026-05-20",
+      "provider": "sec_company_facts",
+      "provider_column_date": "2026-04-26",
+      "period_role": "actual"
+    },
+    {
+      "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:operating_cash_flow",
+      "source_type": "financial_api",
+      "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=actual method=direct_quarter form=10-Q end=2026-04-26 accn=0001045810-26-000052",
+      "metric_name": "operating_cash_flow",
+      "reported_period": "2027Q1",
+      "as_of_date": "2026-05-20",
+      "provider": "sec_company_facts",
+      "provider_column_date": "2026-04-26",
+      "period_role": "actual"
+    },
+    {
+      "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:capex",
+      "source_type": "financial_api",
+      "title": "SEC Company Facts PaymentsToAcquireProductiveAssets period_role=actual method=direct_quarter form=10-Q end=2026-04-26 accn=0001045810-26-000052",
+      "metric_name": "capex",
+      "reported_period": "2027Q1",
+      "as_of_date": "2026-05-20",
+      "provider": "sec_company_facts",
+      "provider_column_date": "2026-04-26",
+      "period_role": "actual"
+    },
+    {
+      "source_id": "financial_api:NVDA:2027Q1:yf:eps",
+      "source_type": "financial_api",
+      "title": "yfinance verified-period metric",
+      "metric_name": "eps",
+      "reported_period": "2027Q1",
+      "provider": "yfinance",
+      "provider_row_date": "2026-05-20",
+      "period_role": "actual"
+    },
+    {
+      "source_id": "financial_api:NVDA:2027Q1:yf:consensus:eps_consensus",
+      "source_type": "financial_api",
+      "title": "yfinance verified-period metric",
+      "metric_name": "eps_consensus",
+      "reported_period": "2027Q1",
+      "provider": "yfinance",
+      "provider_row_date": "2026-05-20",
+      "period_role": "consensus"
+    },
+    {
+      "source_id": "financial_api:NVDA:2027Q1:yf:pq:eps",
+      "source_type": "financial_api",
+      "title": "yfinance verified-period metric",
+      "metric_name": "eps",
+      "reported_period": "2027Q1",
+      "provider": "yfinance",
+      "provider_row_date": "2026-02-25",
+      "period_role": "previous_quarter"
+    },
+    {
+      "source_id": "financial_api:NVDA:2027Q1:yf:ya:eps",
+      "source_type": "financial_api",
+      "title": "yfinance verified-period metric",
+      "metric_name": "eps",
+      "reported_period": "2027Q1",
+      "provider": "yfinance",
+      "provider_row_date": "2025-05-28",
+      "period_role": "year_ago_quarter"
+    },
+    {
+      "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:pq:revenue",
+      "source_type": "financial_api",
+      "title": "SEC Company Facts Revenues period_role=previous_quarter method=ytd_difference form=10-K end=2026-01-25 accn=0001045810-26-000021 prior_end=2025-10-26 prior_accn=0001045810-25-000230",
+      "metric_name": "revenue",
+      "reported_period": "2027Q1",
+      "as_of_date": "2026-02-25",
+      "provider": "sec_company_facts",
+      "provider_column_date": "2026-01-25",
+      "period_role": "previous_quarter"
+    },
+    {
+      "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:pq:operating_cash_flow",
+      "source_type": "financial_api",
+      "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=previous_quarter method=ytd_difference form=10-K end=2026-01-25 accn=0001045810-26-000021 prior_end=2025-10-26 prior_accn=0001045810-25-000230",
+      "metric_name": "operating_cash_flow",
+      "reported_period": "2027Q1",
+      "as_of_date": "2026-02-25",
+      "provider": "sec_company_facts",
+      "provider_column_date": "2026-01-25",
+      "period_role": "previous_quarter"
+    },
+    {
+      "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:pq:capex",
+      "source_type": "financial_api",
+      "title": "SEC Company Facts PaymentsToAcquireProductiveAssets period_role=previous_quarter method=ytd_difference form=10-K end=2026-01-25 accn=0001045810-26-000021 prior_end=2025-10-26 prior_accn=0001045810-25-000230",
+      "metric_name": "capex",
+      "reported_period": "2027Q1",
+      "as_of_date": "2026-02-25",
+      "provider": "sec_company_facts",
+      "provider_column_date": "2026-01-25",
+      "period_role": "previous_quarter"
+    },
+    {
+      "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:ya:revenue",
+      "source_type": "financial_api",
+      "title": "SEC Company Facts Revenues period_role=year_ago_quarter method=direct_quarter form=10-Q end=2025-04-27 accn=0001045810-26-000052",
+      "metric_name": "revenue",
+      "reported_period": "2027Q1",
+      "as_of_date": "2026-05-20",
+      "provider": "sec_company_facts",
+      "provider_column_date": "2025-04-27",
+      "period_role": "year_ago_quarter"
+    },
+    {
+      "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:ya:operating_cash_flow",
+      "source_type": "financial_api",
+      "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=year_ago_quarter method=direct_quarter form=10-Q end=2025-04-27 accn=0001045810-26-000052",
+      "metric_name": "operating_cash_flow",
+      "reported_period": "2027Q1",
+      "as_of_date": "2026-05-20",
+      "provider": "sec_company_facts",
+      "provider_column_date": "2025-04-27",
+      "period_role": "year_ago_quarter"
+    },
+    {
+      "source_id": "financial_api:NVDA:2027Q1:sec:0001045810:ya:capex",
+      "source_type": "financial_api",
+      "title": "SEC Company Facts PaymentsToAcquireProductiveAssets period_role=year_ago_quarter method=direct_quarter form=10-Q end=2025-04-27 accn=0001045810-26-000052",
+      "metric_name": "capex",
+      "reported_period": "2027Q1",
+      "as_of_date": "2026-05-20",
+      "provider": "sec_company_facts",
+      "provider_column_date": "2025-04-27",
+      "period_role": "year_ago_quarter"
+    },
+    {
+      "source_id": "metric:NVDA:2027Q1:free_cash_flow:derived",
+      "source_type": "derived_metric",
+      "title": "Derived free cash flow",
+      "metric_name": "free_cash_flow",
+      "reported_period": "2027Q1",
+      "period_role": "actual"
+    },
+    {
+      "source_id": "metric:NVDA:2027Q1:previous_quarter:free_cash_flow:derived",
+      "source_type": "derived_metric",
+      "title": "Derived free cash flow",
+      "metric_name": "free_cash_flow",
+      "reported_period": "2027Q1",
+      "period_role": "previous_quarter"
+    },
+    {
+      "source_id": "metric:NVDA:2027Q1:year_ago_quarter:free_cash_flow:derived",
+      "source_type": "derived_metric",
+      "title": "Derived free cash flow",
+      "metric_name": "free_cash_flow",
+      "reported_period": "2027Q1",
+      "period_role": "year_ago_quarter"
+    },
+    {
+      "source_id": "nvda-f1q27-presentation:p1:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "nvda-f1q27-presentation",
+      "title": "NVDA F1Q27 quarterly presentation",
+      "section_id": "nvda-f1q27-presentation:p1:section-1",
+      "page": 1
+    },
+    {
+      "source_id": "nvda-f1q27-presentation:p2:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "nvda-f1q27-presentation",
+      "title": "NVDA F1Q27 quarterly presentation",
+      "section_id": "nvda-f1q27-presentation:p2:section-1",
+      "page": 2
+    },
+    {
+      "source_id": "nvda-f1q27-presentation:p3:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "nvda-f1q27-presentation",
+      "title": "NVDA F1Q27 quarterly presentation",
+      "section_id": "nvda-f1q27-presentation:p3:section-1",
+      "page": 3
+    },
+    {
+      "source_id": "nvda-f1q27-presentation:p4:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "nvda-f1q27-presentation",
+      "title": "NVDA F1Q27 quarterly presentation",
+      "section_id": "nvda-f1q27-presentation:p4:section-1",
+      "page": 4
+    },
+    {
+      "source_id": "nvda-f1q27-presentation:p5:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "nvda-f1q27-presentation",
+      "title": "NVDA F1Q27 quarterly presentation",
+      "section_id": "nvda-f1q27-presentation:p5:section-1",
+      "page": 5
+    },
+    {
+      "source_id": "nvda-f1q27-presentation:p6:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "nvda-f1q27-presentation",
+      "title": "NVDA F1Q27 quarterly presentation",
+      "section_id": "nvda-f1q27-presentation:p6:section-1",
+      "page": 6
+    },
+    {
+      "source_id": "nvda-f1q27-presentation:p7:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "nvda-f1q27-presentation",
+      "title": "NVDA F1Q27 quarterly presentation",
+      "section_id": "nvda-f1q27-presentation:p7:section-1",
+      "page": 7
+    },
+    {
+      "source_id": "nvda-f1q27-presentation:p8:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "nvda-f1q27-presentation",
+      "title": "NVDA F1Q27 quarterly presentation",
+      "section_id": "nvda-f1q27-presentation:p8:section-1",
+      "page": 8
+    },
+    {
+      "source_id": "nvda-f1q27-presentation:p9:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "nvda-f1q27-presentation",
+      "title": "NVDA F1Q27 quarterly presentation",
+      "section_id": "nvda-f1q27-presentation:p9:section-1",
+      "page": 9
+    },
+    {
+      "source_id": "nvda-f1q27-presentation:p10:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "nvda-f1q27-presentation",
+      "title": "NVDA F1Q27 quarterly presentation",
+      "section_id": "nvda-f1q27-presentation:p10:section-1",
+      "page": 10
+    },
+    {
+      "source_id": "nvda-f1q27-presentation:p11:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "nvda-f1q27-presentation",
+      "title": "NVDA F1Q27 quarterly presentation",
+      "section_id": "nvda-f1q27-presentation:p11:section-1",
+      "page": 11
+    },
+    {
+      "source_id": "nvda-f1q27-presentation:p12:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "nvda-f1q27-presentation",
+      "title": "NVDA F1Q27 quarterly presentation",
+      "section_id": "nvda-f1q27-presentation:p12:section-1",
+      "page": 12
+    },
+    {
+      "source_id": "nvda-f1q27-presentation:p13:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "nvda-f1q27-presentation",
+      "title": "NVDA F1Q27 quarterly presentation",
+      "section_id": "nvda-f1q27-presentation:p13:section-1",
+      "page": 13
+    },
+    {
+      "source_id": "nvda-f1q27-presentation:p14:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "nvda-f1q27-presentation",
+      "title": "NVDA F1Q27 quarterly presentation",
+      "section_id": "nvda-f1q27-presentation:p14:section-1",
+      "page": 14
+    },
+    {
+      "source_id": "nvda-f1q27-presentation:p15:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "nvda-f1q27-presentation",
+      "title": "NVDA F1Q27 quarterly presentation",
+      "section_id": "nvda-f1q27-presentation:p15:section-1",
+      "page": 15
+    },
+    {
+      "source_id": "nvda-f1q27-presentation:p16:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "nvda-f1q27-presentation",
+      "title": "NVDA F1Q27 quarterly presentation",
+      "section_id": "nvda-f1q27-presentation:p16:section-1",
+      "page": 16
+    }
+  ],
+  "context_budget": {
+    "max_input_tokens": 96000,
+    "max_output_tokens": 16000,
+    "max_total_tokens": 128000
+  },
+  "include_markdown": true,
+  "purpose": "earnings_review_not_investment_advice",
+  "is_investment_advice": false,
+  "dry_run": false
+}

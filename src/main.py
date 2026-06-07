@@ -21,12 +21,43 @@ from pydantic import ValidationError
 
 from .llm import get_provider
 from .preprocessor import build_normalized_review_request
+from .runtime_config import env_float, env_int, env_path, env_str
 from .workflow import ReviewWorkflow
 from .workflow_models import (
     NormalizedReviewRequest,
     ReviewRequest,
     source_refs_from_financial_metrics,
 )
+
+DEFAULT_API_HOST = "127.0.0.1"
+DEFAULT_API_PORT = 8000
+DEFAULT_API_URL = "http://127.0.0.1:8000"
+DEFAULT_OUTPUT_DIR = Path("outputs")
+DEFAULT_API_REQUEST_TIMEOUT_SECONDS = 300.0
+
+
+def _default_api_host() -> str:
+    return env_str("EARNINGS_DEBATE_API_HOST", DEFAULT_API_HOST)
+
+
+def _default_api_port() -> int:
+    return env_int("EARNINGS_DEBATE_API_PORT", DEFAULT_API_PORT, min_value=1)
+
+
+def _default_api_url() -> str:
+    return env_str("EARNINGS_DEBATE_API_URL", DEFAULT_API_URL)
+
+
+def _default_output_dir() -> Path:
+    return env_path("EARNINGS_DEBATE_OUTPUT_DIR", DEFAULT_OUTPUT_DIR)
+
+
+def _api_request_timeout_seconds() -> float:
+    return env_float(
+        "EARNINGS_DEBATE_API_REQUEST_TIMEOUT_SECONDS",
+        DEFAULT_API_REQUEST_TIMEOUT_SECONDS,
+        min_value=0.0,
+    )
 
 
 def setup_logging() -> None:
@@ -47,8 +78,8 @@ def cli() -> None:
 
 
 @cli.command()
-@click.option("--host", default="127.0.0.1", show_default=True)
-@click.option("--port", default=8000, show_default=True, type=int)
+@click.option("--host", default=_default_api_host, show_default=DEFAULT_API_HOST)
+@click.option("--port", default=_default_api_port, show_default=str(DEFAULT_API_PORT), type=int)
 @click.option("--reload", is_flag=True, help="Enable uvicorn reload for local development.")
 def serve(host: str, port: int, reload: bool) -> None:
     """Start the FastAPI server."""
@@ -61,21 +92,25 @@ def serve(host: str, port: int, reload: bool) -> None:
 
 
 @cli.command()
-@click.option("--api-url", default="http://127.0.0.1:8000", show_default=True)
+@click.option("--api-url", default=_default_api_url, show_default=DEFAULT_API_URL)
 @click.option("--input-json", type=click.Path(exists=True, path_type=Path))
 @click.option("--ticker", help="Ticker used when --input-json is not supplied.")
 @click.option("--fiscal-period", "--quarter", help='Fiscal period, e.g. "2025Q3".')
-@click.option("--filing-url", help="SEC filing URL used when fixture sections are absent.")
+@click.option("--filing-url", help="SEC filing URL to fetch and normalize into sections.")
 @click.option(
     "--local-path",
     "local_paths",
     multiple=True,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="Local PDF/text document to normalize before calling the API.",
+    help="Local PDF/text/Markdown document to normalize; may be repeated.",
 )
-@click.option("--raw-text", help="Raw source text to normalize before calling the API.")
+@click.option("--raw-text", help="Inline source text to normalize into sections.")
 @click.option(
-    "--out", "out_dir", default="outputs", show_default=True, type=click.Path(path_type=Path)
+    "--out",
+    "out_dir",
+    default=_default_output_dir,
+    show_default=str(DEFAULT_OUTPUT_DIR),
+    type=click.Path(path_type=Path),
 )
 def run(
     api_url: str,
@@ -87,7 +122,7 @@ def run(
     raw_text: str | None,
     out_dir: Path,
 ) -> None:
-    """Call POST /reviews and save the API response artifacts."""
+    """Run a review locally or through POST /reviews and save artifacts."""
     load_dotenv()
     setup_logging()
 
@@ -101,7 +136,7 @@ def run(
     )
     payload = normalized_request.model_dump(mode="json")
     if api_url == "local" or (
-        api_url == "http://127.0.0.1:8000" and os.getenv("LLM_PROVIDER", "").lower() == "fake"
+        api_url == DEFAULT_API_URL and os.getenv("LLM_PROVIDER", "").lower() == "fake"
     ):
         from .api import _success_response
 
@@ -109,7 +144,11 @@ def run(
         workflow_result = ReviewWorkflow(get_provider()).run(review_request)
         body = _success_response(review_request, workflow_result).model_dump(mode="json")
     else:
-        response = requests.post(f"{api_url.rstrip('/')}/reviews", json=payload, timeout=300)
+        response = requests.post(
+            f"{api_url.rstrip('/')}/reviews",
+            json=payload,
+            timeout=_api_request_timeout_seconds(),
+        )
         response.raise_for_status()
         body = response.json()
 

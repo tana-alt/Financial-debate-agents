@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from .expected_metrics import canonical_metric_period_context, expected_metric_context
 from .llm import LLMProvider
+from .runtime_config import env_int
 from .workflow_agents import BearAgent, BullAgent, JudgeAgent
 from .workflow_models import (
     AgentExecutionTrace,
@@ -51,7 +52,7 @@ class AgentRuntime:
         *,
         trace_sink: list[AgentExecutionTrace] | None = None,
     ):
-        with ThreadPoolExecutor(max_workers=len(agent_classes)) as executor:
+        with ThreadPoolExecutor(max_workers=_agent_max_workers(len(agent_classes))) as executor:
             futures = [
                 executor.submit(
                     agent_class(self.llm, trace_sink=trace_sink).run,
@@ -192,7 +193,7 @@ class DebateRunner:
             else evidence_field
         )
         last_error: WorkflowValidationError | None = None
-        for _ in range(2):
+        for _ in range(_debate_selection_attempts()):
             run_context = context
             if last_error is not None:
                 run_context = {
@@ -293,7 +294,7 @@ class JudgeRunner:
             ],
         }
         last_error: WorkflowValidationError | None = None
-        for _ in range(2):
+        for _ in range(_judge_selection_attempts()):
             run_context = base_context
             if last_error is not None:
                 run_context = {
@@ -333,3 +334,15 @@ class JudgeRunner:
         if quality_warnings:
             decision = self.validator.sanitize_investment_advice_text(decision)
         return decision, quality_warnings
+
+
+def _agent_max_workers(default: int) -> int:
+    return env_int("EARNINGS_DEBATE_AGENT_MAX_WORKERS", default, min_value=1)
+
+
+def _debate_selection_attempts() -> int:
+    return env_int("EARNINGS_DEBATE_DEBATE_SELECTION_ATTEMPTS", 2, min_value=1)
+
+
+def _judge_selection_attempts() -> int:
+    return env_int("EARNINGS_DEBATE_JUDGE_SELECTION_ATTEMPTS", 2, min_value=1)

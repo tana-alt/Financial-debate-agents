@@ -1,6 +1,11 @@
 from datetime import date
 
-from src.sec_company_facts import build_sec_company_facts_metrics, select_sec_fact_value
+from src.sec_company_facts import (
+    build_sec_company_facts_metrics,
+    fetch_sec_company_facts,
+    resolve_cik,
+    select_sec_fact_value,
+)
 from src.workflow_models import AvailabilityStatus, MetricPeriodRole
 
 
@@ -20,6 +25,58 @@ def row(value, start, end, *, form="10-Q", filed="2025-08-01", fp="Q2"):
         "filed": filed,
         "fp": fp,
     }
+
+
+class FakeSecResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self.payload
+
+
+class FakeSecSession:
+    def __init__(self, payload):
+        self.payload = payload
+        self.calls = []
+
+    def get(self, url, timeout):
+        self.calls.append({"url": url, "timeout": timeout})
+        return FakeSecResponse(self.payload)
+
+
+def test_sec_company_facts_fetch_uses_env_timeout(monkeypatch):
+    monkeypatch.setenv("EARNINGS_DEBATE_SEC_REQUEST_TIMEOUT_SECONDS", "9.5")
+    session = FakeSecSession({"facts": {}})
+
+    payload, cik = fetch_sec_company_facts("NVDA", cik=1045810, session=session)
+
+    assert payload == {"facts": {}}
+    assert cik == 1045810
+    assert session.calls == [
+        {
+            "url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001045810.json",
+            "timeout": 9.5,
+        }
+    ]
+
+
+def test_resolve_cik_uses_env_timeout(monkeypatch):
+    monkeypatch.setenv("EARNINGS_DEBATE_SEC_REQUEST_TIMEOUT_SECONDS", "8")
+    session = FakeSecSession({"0": {"ticker": "NVDA", "cik_str": 1045810}})
+
+    cik = resolve_cik("nvda", session=session)
+
+    assert cik == 1045810
+    assert session.calls == [
+        {
+            "url": "https://www.sec.gov/files/company_tickers.json",
+            "timeout": 8.0,
+        }
+    ]
 
 
 def test_select_sec_fact_value_prefers_direct_quarter_value():

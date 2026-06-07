@@ -1,0 +1,1797 @@
+{
+  "schema_version": "normalized-review-request.v1",
+  "request_id": "sample-zs-2026q3",
+  "ticker": "ZS",
+  "fiscal_period": "2026Q3",
+  "target_earnings_date": "2026-06-02",
+  "target_period_end_date": "2026-04-30",
+  "prior_fiscal_period": "2026Q2",
+  "input_profile": "yfinance_sec_presentation_tagged",
+  "financial_metrics": {
+    "ticker": "ZS",
+    "fiscal_period": "2026Q3",
+    "target_earnings_date": "2026-06-02",
+    "target_period_end_date": "2026-04-30",
+    "prior_fiscal_period": "2026Q2",
+    "currency": "USD",
+    "input_profile": "yfinance_sec_presentation_tagged",
+    "revenue": 850475000.0,
+    "eps": 1.08,
+    "eps_consensus": 1.01,
+    "eps_surprise_pct": 6.9307,
+    "operating_margin_pct": 23.0,
+    "operating_cash_flow": 198016000.0,
+    "free_cash_flow": 155615000.0,
+    "capex": -42401000.0,
+    "source_refs": [
+      {
+        "as_of_date": "2026-05-26",
+        "source_id": "financial_api:ZS:2026Q3:sec:0001713683:revenue",
+        "metric_name": "revenue",
+        "reported_period": "2026Q3",
+        "provider": "sec_company_facts",
+        "period_role": "actual",
+        "provider_column_date": "2026-04-30",
+        "title": "SEC Company Facts RevenueFromContractWithCustomerExcludingAssessedTax period_role=actual method=direct_quarter form=10-Q end=2026-04-30 accn=0001713683-26-000096",
+        "source_type": "financial_api"
+      },
+      {
+        "as_of_date": "2026-05-26",
+        "source_id": "financial_api:ZS:2026Q3:sec:0001713683:operating_cash_flow",
+        "metric_name": "operating_cash_flow",
+        "reported_period": "2026Q3",
+        "provider": "sec_company_facts",
+        "period_role": "actual",
+        "provider_column_date": "2026-04-30",
+        "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=actual method=ytd_difference form=10-Q end=2026-04-30 accn=0001713683-26-000096 prior_end=2026-01-31 prior_accn=0001713683-26-000048",
+        "source_type": "financial_api"
+      },
+      {
+        "as_of_date": "2026-05-26",
+        "source_id": "financial_api:ZS:2026Q3:sec:0001713683:capex",
+        "metric_name": "capex",
+        "reported_period": "2026Q3",
+        "provider": "sec_company_facts",
+        "period_role": "actual",
+        "provider_column_date": "2026-04-30",
+        "title": "SEC Company Facts PaymentsToAcquirePropertyPlantAndEquipment period_role=actual method=ytd_difference form=10-Q end=2026-04-30 accn=0001713683-26-000096 prior_end=2026-01-31 prior_accn=0001713683-26-000048",
+        "source_type": "financial_api"
+      },
+      {
+        "source_id": "financial_api:ZS:2026Q3:yf:eps",
+        "metric_name": "eps",
+        "reported_period": "2026Q3",
+        "provider": "yfinance",
+        "provider_row_date": "2026-05-26",
+        "period_role": "actual",
+        "title": "yfinance verified-period metric",
+        "source_type": "financial_api"
+      },
+      {
+        "source_id": "financial_api:ZS:2026Q3:yf:consensus:eps_consensus",
+        "metric_name": "eps_consensus",
+        "reported_period": "2026Q3",
+        "provider": "yfinance",
+        "provider_row_date": "2026-05-26",
+        "period_role": "consensus",
+        "title": "yfinance verified-period metric",
+        "source_type": "financial_api"
+      },
+      {
+        "source_id": "financial_api:ZS:2026Q3:yf:pq:eps",
+        "metric_name": "eps",
+        "reported_period": "2026Q3",
+        "provider": "yfinance",
+        "provider_row_date": "2026-02-26",
+        "period_role": "previous_quarter",
+        "title": "yfinance verified-period metric",
+        "source_type": "financial_api"
+      },
+      {
+        "source_id": "financial_api:ZS:2026Q3:yf:ya:eps",
+        "metric_name": "eps",
+        "reported_period": "2026Q3",
+        "provider": "yfinance",
+        "provider_row_date": "2025-05-29",
+        "period_role": "year_ago_quarter",
+        "title": "yfinance verified-period metric",
+        "source_type": "financial_api"
+      },
+      {
+        "as_of_date": "2026-02-26",
+        "source_id": "financial_api:ZS:2026Q3:sec:0001713683:pq:revenue",
+        "metric_name": "revenue",
+        "reported_period": "2026Q3",
+        "provider": "sec_company_facts",
+        "period_role": "previous_quarter",
+        "provider_column_date": "2026-01-31",
+        "title": "SEC Company Facts RevenueFromContractWithCustomerExcludingAssessedTax period_role=previous_quarter method=direct_quarter form=10-Q end=2026-01-31 accn=0001713683-26-000048",
+        "source_type": "financial_api"
+      },
+      {
+        "as_of_date": "2026-02-26",
+        "source_id": "financial_api:ZS:2026Q3:sec:0001713683:pq:operating_cash_flow",
+        "metric_name": "operating_cash_flow",
+        "reported_period": "2026Q3",
+        "provider": "sec_company_facts",
+        "period_role": "previous_quarter",
+        "provider_column_date": "2026-01-31",
+        "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=previous_quarter method=ytd_difference form=10-Q end=2026-01-31 accn=0001713683-26-000048 prior_end=2025-10-31 prior_accn=0001713683-25-000205",
+        "source_type": "financial_api"
+      },
+      {
+        "as_of_date": "2026-02-26",
+        "source_id": "financial_api:ZS:2026Q3:sec:0001713683:pq:capex",
+        "metric_name": "capex",
+        "reported_period": "2026Q3",
+        "provider": "sec_company_facts",
+        "period_role": "previous_quarter",
+        "provider_column_date": "2026-01-31",
+        "title": "SEC Company Facts PaymentsToAcquirePropertyPlantAndEquipment period_role=previous_quarter method=ytd_difference form=10-Q end=2026-01-31 accn=0001713683-26-000048 prior_end=2025-10-31 prior_accn=0001713683-25-000205",
+        "source_type": "financial_api"
+      },
+      {
+        "as_of_date": "2026-05-26",
+        "source_id": "financial_api:ZS:2026Q3:sec:0001713683:ya:revenue",
+        "metric_name": "revenue",
+        "reported_period": "2026Q3",
+        "provider": "sec_company_facts",
+        "period_role": "year_ago_quarter",
+        "provider_column_date": "2025-04-30",
+        "title": "SEC Company Facts RevenueFromContractWithCustomerExcludingAssessedTax period_role=year_ago_quarter method=direct_quarter form=10-Q end=2025-04-30 accn=0001713683-26-000096",
+        "source_type": "financial_api"
+      },
+      {
+        "as_of_date": "2026-05-26",
+        "source_id": "financial_api:ZS:2026Q3:sec:0001713683:ya:operating_cash_flow",
+        "metric_name": "operating_cash_flow",
+        "reported_period": "2026Q3",
+        "provider": "sec_company_facts",
+        "period_role": "year_ago_quarter",
+        "provider_column_date": "2025-04-30",
+        "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=year_ago_quarter method=ytd_difference form=10-Q end=2025-04-30 accn=0001713683-26-000096 prior_end=2025-01-31 prior_accn=0001713683-26-000048",
+        "source_type": "financial_api"
+      },
+      {
+        "as_of_date": "2026-05-26",
+        "source_id": "financial_api:ZS:2026Q3:sec:0001713683:ya:capex",
+        "metric_name": "capex",
+        "reported_period": "2026Q3",
+        "provider": "sec_company_facts",
+        "period_role": "year_ago_quarter",
+        "provider_column_date": "2025-04-30",
+        "title": "SEC Company Facts PaymentsToAcquirePropertyPlantAndEquipment period_role=year_ago_quarter method=ytd_difference form=10-Q end=2025-04-30 accn=0001713683-26-000096 prior_end=2025-01-31 prior_accn=0001713683-26-000048",
+        "source_type": "financial_api"
+      },
+      {
+        "source_id": "metric:ZS:2026Q3:free_cash_flow:derived",
+        "metric_name": "free_cash_flow",
+        "reported_period": "2026Q3",
+        "period_role": "actual",
+        "title": "Derived free cash flow",
+        "source_type": "derived_metric"
+      },
+      {
+        "source_id": "metric:ZS:2026Q3:previous_quarter:free_cash_flow:derived",
+        "metric_name": "free_cash_flow",
+        "reported_period": "2026Q3",
+        "period_role": "previous_quarter",
+        "title": "Derived free cash flow",
+        "source_type": "derived_metric"
+      },
+      {
+        "source_id": "metric:ZS:2026Q3:year_ago_quarter:free_cash_flow:derived",
+        "metric_name": "free_cash_flow",
+        "reported_period": "2026Q3",
+        "period_role": "year_ago_quarter",
+        "title": "Derived free cash flow",
+        "source_type": "derived_metric"
+      }
+    ],
+    "canonical_metrics": [
+      {
+        "metric_id": "metric:ZS:2026Q3:eps",
+        "metric_name": "eps",
+        "value": 1.08,
+        "unit": "USD/share",
+        "fiscal_period": "2026Q3",
+        "period_role": "actual",
+        "source_ref": {
+          "source_id": "financial_api:ZS:2026Q3:yf:eps",
+          "metric_name": "eps",
+          "reported_period": "2026Q3",
+          "provider": "yfinance",
+          "provider_row_date": "2026-05-26",
+          "period_role": "actual",
+          "title": "yfinance verified-period metric",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:ZS:2026Q3:revenue",
+        "metric_name": "revenue",
+        "value": 850475000.0,
+        "unit": "USD",
+        "fiscal_period": "2026Q3",
+        "period_role": "actual",
+        "source_ref": {
+          "as_of_date": "2026-05-26",
+          "source_id": "financial_api:ZS:2026Q3:sec:0001713683:revenue",
+          "metric_name": "revenue",
+          "reported_period": "2026Q3",
+          "provider": "sec_company_facts",
+          "period_role": "actual",
+          "provider_column_date": "2026-04-30",
+          "title": "SEC Company Facts RevenueFromContractWithCustomerExcludingAssessedTax period_role=actual method=direct_quarter form=10-Q end=2026-04-30 accn=0001713683-26-000096",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:ZS:2026Q3:operating_cash_flow",
+        "metric_name": "operating_cash_flow",
+        "value": 198016000.0,
+        "unit": "USD",
+        "fiscal_period": "2026Q3",
+        "period_role": "actual",
+        "source_ref": {
+          "as_of_date": "2026-05-26",
+          "source_id": "financial_api:ZS:2026Q3:sec:0001713683:operating_cash_flow",
+          "metric_name": "operating_cash_flow",
+          "reported_period": "2026Q3",
+          "provider": "sec_company_facts",
+          "period_role": "actual",
+          "provider_column_date": "2026-04-30",
+          "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=actual method=ytd_difference form=10-Q end=2026-04-30 accn=0001713683-26-000096 prior_end=2026-01-31 prior_accn=0001713683-26-000048",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:ZS:2026Q3:capex",
+        "metric_name": "capex",
+        "value": -42401000.0,
+        "unit": "USD",
+        "fiscal_period": "2026Q3",
+        "period_role": "actual",
+        "source_ref": {
+          "as_of_date": "2026-05-26",
+          "source_id": "financial_api:ZS:2026Q3:sec:0001713683:capex",
+          "metric_name": "capex",
+          "reported_period": "2026Q3",
+          "provider": "sec_company_facts",
+          "period_role": "actual",
+          "provider_column_date": "2026-04-30",
+          "title": "SEC Company Facts PaymentsToAcquirePropertyPlantAndEquipment period_role=actual method=ytd_difference form=10-Q end=2026-04-30 accn=0001713683-26-000096 prior_end=2026-01-31 prior_accn=0001713683-26-000048",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:ZS:2026Q3:previous_quarter:eps",
+        "metric_name": "eps",
+        "value": 1.01,
+        "unit": "USD/share",
+        "fiscal_period": "2026Q3",
+        "period_role": "previous_quarter",
+        "source_ref": {
+          "source_id": "financial_api:ZS:2026Q3:yf:pq:eps",
+          "metric_name": "eps",
+          "reported_period": "2026Q3",
+          "provider": "yfinance",
+          "provider_row_date": "2026-02-26",
+          "period_role": "previous_quarter",
+          "title": "yfinance verified-period metric",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:ZS:2026Q3:previous_quarter:revenue",
+        "metric_name": "revenue",
+        "value": 815751000.0,
+        "unit": "USD",
+        "fiscal_period": "2026Q3",
+        "period_role": "previous_quarter",
+        "source_ref": {
+          "as_of_date": "2026-02-26",
+          "source_id": "financial_api:ZS:2026Q3:sec:0001713683:pq:revenue",
+          "metric_name": "revenue",
+          "reported_period": "2026Q3",
+          "provider": "sec_company_facts",
+          "period_role": "previous_quarter",
+          "provider_column_date": "2026-01-31",
+          "title": "SEC Company Facts RevenueFromContractWithCustomerExcludingAssessedTax period_role=previous_quarter method=direct_quarter form=10-Q end=2026-01-31 accn=0001713683-26-000048",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:ZS:2026Q3:previous_quarter:operating_cash_flow",
+        "metric_name": "operating_cash_flow",
+        "value": 204073000.0,
+        "unit": "USD",
+        "fiscal_period": "2026Q3",
+        "period_role": "previous_quarter",
+        "source_ref": {
+          "as_of_date": "2026-02-26",
+          "source_id": "financial_api:ZS:2026Q3:sec:0001713683:pq:operating_cash_flow",
+          "metric_name": "operating_cash_flow",
+          "reported_period": "2026Q3",
+          "provider": "sec_company_facts",
+          "period_role": "previous_quarter",
+          "provider_column_date": "2026-01-31",
+          "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=previous_quarter method=ytd_difference form=10-Q end=2026-01-31 accn=0001713683-26-000048 prior_end=2025-10-31 prior_accn=0001713683-25-000205",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:ZS:2026Q3:previous_quarter:capex",
+        "metric_name": "capex",
+        "value": -17755000.0,
+        "unit": "USD",
+        "fiscal_period": "2026Q3",
+        "period_role": "previous_quarter",
+        "source_ref": {
+          "as_of_date": "2026-02-26",
+          "source_id": "financial_api:ZS:2026Q3:sec:0001713683:pq:capex",
+          "metric_name": "capex",
+          "reported_period": "2026Q3",
+          "provider": "sec_company_facts",
+          "period_role": "previous_quarter",
+          "provider_column_date": "2026-01-31",
+          "title": "SEC Company Facts PaymentsToAcquirePropertyPlantAndEquipment period_role=previous_quarter method=ytd_difference form=10-Q end=2026-01-31 accn=0001713683-26-000048 prior_end=2025-10-31 prior_accn=0001713683-25-000205",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:ZS:2026Q3:year_ago_quarter:eps",
+        "metric_name": "eps",
+        "value": 0.84,
+        "unit": "USD/share",
+        "fiscal_period": "2026Q3",
+        "period_role": "year_ago_quarter",
+        "source_ref": {
+          "source_id": "financial_api:ZS:2026Q3:yf:ya:eps",
+          "metric_name": "eps",
+          "reported_period": "2026Q3",
+          "provider": "yfinance",
+          "provider_row_date": "2025-05-29",
+          "period_role": "year_ago_quarter",
+          "title": "yfinance verified-period metric",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:ZS:2026Q3:year_ago_quarter:revenue",
+        "metric_name": "revenue",
+        "value": 678034000.0,
+        "unit": "USD",
+        "fiscal_period": "2026Q3",
+        "period_role": "year_ago_quarter",
+        "source_ref": {
+          "as_of_date": "2026-05-26",
+          "source_id": "financial_api:ZS:2026Q3:sec:0001713683:ya:revenue",
+          "metric_name": "revenue",
+          "reported_period": "2026Q3",
+          "provider": "sec_company_facts",
+          "period_role": "year_ago_quarter",
+          "provider_column_date": "2025-04-30",
+          "title": "SEC Company Facts RevenueFromContractWithCustomerExcludingAssessedTax period_role=year_ago_quarter method=direct_quarter form=10-Q end=2025-04-30 accn=0001713683-26-000096",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:ZS:2026Q3:year_ago_quarter:operating_cash_flow",
+        "metric_name": "operating_cash_flow",
+        "value": 211081000.0,
+        "unit": "USD",
+        "fiscal_period": "2026Q3",
+        "period_role": "year_ago_quarter",
+        "source_ref": {
+          "as_of_date": "2026-05-26",
+          "source_id": "financial_api:ZS:2026Q3:sec:0001713683:ya:operating_cash_flow",
+          "metric_name": "operating_cash_flow",
+          "reported_period": "2026Q3",
+          "provider": "sec_company_facts",
+          "period_role": "year_ago_quarter",
+          "provider_column_date": "2025-04-30",
+          "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=year_ago_quarter method=ytd_difference form=10-Q end=2025-04-30 accn=0001713683-26-000096 prior_end=2025-01-31 prior_accn=0001713683-26-000048",
+          "source_type": "financial_api"
+        }
+      },
+      {
+        "metric_id": "metric:ZS:2026Q3:year_ago_quarter:capex",
+        "metric_name": "capex",
+        "value": -72163000.0,
+        "unit": "USD",
+        "fiscal_period": "2026Q3",
+        "period_role": "year_ago_quarter",
+        "source_ref": {
+          "as_of_date": "2026-05-26",
+          "source_id": "financial_api:ZS:2026Q3:sec:0001713683:ya:capex",
+          "metric_name": "capex",
+          "reported_period": "2026Q3",
+          "provider": "sec_company_facts",
+          "period_role": "year_ago_quarter",
+          "provider_column_date": "2025-04-30",
+          "title": "SEC Company Facts PaymentsToAcquirePropertyPlantAndEquipment period_role=year_ago_quarter method=ytd_difference form=10-Q end=2025-04-30 accn=0001713683-26-000096 prior_end=2025-01-31 prior_accn=0001713683-26-000048",
+          "source_type": "financial_api"
+        }
+      }
+    ],
+    "derived_metrics": [
+      {
+        "metric_id": "metric:ZS:2026Q3:free_cash_flow",
+        "metric_name": "free_cash_flow",
+        "value": 155615000.0,
+        "unit": "USD",
+        "fiscal_period": "2026Q3",
+        "period_role": "actual",
+        "source_ref": {
+          "source_id": "metric:ZS:2026Q3:free_cash_flow:derived",
+          "metric_name": "free_cash_flow",
+          "reported_period": "2026Q3",
+          "period_role": "actual",
+          "title": "Derived free cash flow",
+          "source_type": "derived_metric"
+        },
+        "component_metric_ids": [
+          "metric:ZS:2026Q3:operating_cash_flow",
+          "metric:ZS:2026Q3:capex"
+        ],
+        "component_source_refs": [
+          {
+            "as_of_date": "2026-05-26",
+            "source_id": "financial_api:ZS:2026Q3:sec:0001713683:operating_cash_flow",
+            "metric_name": "operating_cash_flow",
+            "reported_period": "2026Q3",
+            "provider": "sec_company_facts",
+            "period_role": "actual",
+            "provider_column_date": "2026-04-30",
+            "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=actual method=ytd_difference form=10-Q end=2026-04-30 accn=0001713683-26-000096 prior_end=2026-01-31 prior_accn=0001713683-26-000048",
+            "source_type": "financial_api"
+          },
+          {
+            "as_of_date": "2026-05-26",
+            "source_id": "financial_api:ZS:2026Q3:sec:0001713683:capex",
+            "metric_name": "capex",
+            "reported_period": "2026Q3",
+            "provider": "sec_company_facts",
+            "period_role": "actual",
+            "provider_column_date": "2026-04-30",
+            "title": "SEC Company Facts PaymentsToAcquirePropertyPlantAndEquipment period_role=actual method=ytd_difference form=10-Q end=2026-04-30 accn=0001713683-26-000096 prior_end=2026-01-31 prior_accn=0001713683-26-000048",
+            "source_type": "financial_api"
+          }
+        ]
+      },
+      {
+        "metric_id": "metric:ZS:2026Q3:previous_quarter:free_cash_flow",
+        "metric_name": "free_cash_flow",
+        "value": 186318000.0,
+        "unit": "USD",
+        "fiscal_period": "2026Q3",
+        "period_role": "previous_quarter",
+        "source_ref": {
+          "source_id": "metric:ZS:2026Q3:previous_quarter:free_cash_flow:derived",
+          "metric_name": "free_cash_flow",
+          "reported_period": "2026Q3",
+          "period_role": "previous_quarter",
+          "title": "Derived free cash flow",
+          "source_type": "derived_metric"
+        },
+        "component_metric_ids": [
+          "metric:ZS:2026Q3:previous_quarter:operating_cash_flow",
+          "metric:ZS:2026Q3:previous_quarter:capex"
+        ],
+        "component_source_refs": [
+          {
+            "as_of_date": "2026-02-26",
+            "source_id": "financial_api:ZS:2026Q3:sec:0001713683:pq:operating_cash_flow",
+            "metric_name": "operating_cash_flow",
+            "reported_period": "2026Q3",
+            "provider": "sec_company_facts",
+            "period_role": "previous_quarter",
+            "provider_column_date": "2026-01-31",
+            "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=previous_quarter method=ytd_difference form=10-Q end=2026-01-31 accn=0001713683-26-000048 prior_end=2025-10-31 prior_accn=0001713683-25-000205",
+            "source_type": "financial_api"
+          },
+          {
+            "as_of_date": "2026-02-26",
+            "source_id": "financial_api:ZS:2026Q3:sec:0001713683:pq:capex",
+            "metric_name": "capex",
+            "reported_period": "2026Q3",
+            "provider": "sec_company_facts",
+            "period_role": "previous_quarter",
+            "provider_column_date": "2026-01-31",
+            "title": "SEC Company Facts PaymentsToAcquirePropertyPlantAndEquipment period_role=previous_quarter method=ytd_difference form=10-Q end=2026-01-31 accn=0001713683-26-000048 prior_end=2025-10-31 prior_accn=0001713683-25-000205",
+            "source_type": "financial_api"
+          }
+        ]
+      },
+      {
+        "metric_id": "metric:ZS:2026Q3:year_ago_quarter:free_cash_flow",
+        "metric_name": "free_cash_flow",
+        "value": 138918000.0,
+        "unit": "USD",
+        "fiscal_period": "2026Q3",
+        "period_role": "year_ago_quarter",
+        "source_ref": {
+          "source_id": "metric:ZS:2026Q3:year_ago_quarter:free_cash_flow:derived",
+          "metric_name": "free_cash_flow",
+          "reported_period": "2026Q3",
+          "period_role": "year_ago_quarter",
+          "title": "Derived free cash flow",
+          "source_type": "derived_metric"
+        },
+        "component_metric_ids": [
+          "metric:ZS:2026Q3:year_ago_quarter:operating_cash_flow",
+          "metric:ZS:2026Q3:year_ago_quarter:capex"
+        ],
+        "component_source_refs": [
+          {
+            "as_of_date": "2026-05-26",
+            "source_id": "financial_api:ZS:2026Q3:sec:0001713683:ya:operating_cash_flow",
+            "metric_name": "operating_cash_flow",
+            "reported_period": "2026Q3",
+            "provider": "sec_company_facts",
+            "period_role": "year_ago_quarter",
+            "provider_column_date": "2025-04-30",
+            "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=year_ago_quarter method=ytd_difference form=10-Q end=2025-04-30 accn=0001713683-26-000096 prior_end=2025-01-31 prior_accn=0001713683-26-000048",
+            "source_type": "financial_api"
+          },
+          {
+            "as_of_date": "2026-05-26",
+            "source_id": "financial_api:ZS:2026Q3:sec:0001713683:ya:capex",
+            "metric_name": "capex",
+            "reported_period": "2026Q3",
+            "provider": "sec_company_facts",
+            "period_role": "year_ago_quarter",
+            "provider_column_date": "2025-04-30",
+            "title": "SEC Company Facts PaymentsToAcquirePropertyPlantAndEquipment period_role=year_ago_quarter method=ytd_difference form=10-Q end=2025-04-30 accn=0001713683-26-000096 prior_end=2025-01-31 prior_accn=0001713683-26-000048",
+            "source_type": "financial_api"
+          }
+        ]
+      }
+    ],
+    "availability": [
+      {
+        "key": "input_profile",
+        "status": "available",
+        "reason": "Input profile: yfinance_sec_presentation_tagged",
+        "blocks_verdict": false
+      },
+      {
+        "key": "revenue",
+        "status": "available",
+        "reason": "Required canonical metric revenue is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "eps",
+        "status": "available",
+        "reason": "Required canonical metric eps is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "operating_cash_flow",
+        "status": "available",
+        "reason": "Required canonical metric operating_cash_flow is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "capex",
+        "status": "available",
+        "reason": "Required canonical metric capex is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "free_cash_flow",
+        "status": "available",
+        "reason": "Required canonical metric free_cash_flow is available.",
+        "source_type": "derived_metric",
+        "blocks_verdict": false
+      },
+      {
+        "key": "previous_quarter:revenue",
+        "status": "available",
+        "reason": "Required canonical metric previous_quarter:revenue is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "previous_quarter:eps",
+        "status": "available",
+        "reason": "Required canonical metric previous_quarter:eps is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "previous_quarter:operating_cash_flow",
+        "status": "available",
+        "reason": "Required canonical metric previous_quarter:operating_cash_flow is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "previous_quarter:capex",
+        "status": "available",
+        "reason": "Required canonical metric previous_quarter:capex is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "previous_quarter:free_cash_flow",
+        "status": "available",
+        "reason": "Required canonical metric previous_quarter:free_cash_flow is available.",
+        "source_type": "derived_metric",
+        "blocks_verdict": false
+      },
+      {
+        "key": "year_ago_quarter:revenue",
+        "status": "available",
+        "reason": "Required canonical metric year_ago_quarter:revenue is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "year_ago_quarter:eps",
+        "status": "available",
+        "reason": "Required canonical metric year_ago_quarter:eps is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "year_ago_quarter:operating_cash_flow",
+        "status": "available",
+        "reason": "Required canonical metric year_ago_quarter:operating_cash_flow is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "year_ago_quarter:capex",
+        "status": "available",
+        "reason": "Required canonical metric year_ago_quarter:capex is available.",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      },
+      {
+        "key": "year_ago_quarter:free_cash_flow",
+        "status": "available",
+        "reason": "Required canonical metric year_ago_quarter:free_cash_flow is available.",
+        "source_type": "derived_metric",
+        "blocks_verdict": false
+      },
+      {
+        "key": "period_verification",
+        "status": "available",
+        "reason": "Period verification: verified",
+        "source_type": "financial_api",
+        "blocks_verdict": false
+      }
+    ]
+  },
+  "document_sections": [
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p1:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p1:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 1,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p1:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 1",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 1,
+      "end_page": 1
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p2:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p2:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 2,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p2:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 2",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 2,
+      "end_page": 2
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p3:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p3:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 3,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p3:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 3",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 3,
+      "end_page": 3
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p4:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p4:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 4,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p4:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 4",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 4,
+      "end_page": 4
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p5:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p5:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 5,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p5:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 5",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 5,
+      "end_page": 5
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p6:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p6:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 6,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p6:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 6",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 6,
+      "end_page": 6
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p7:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p7:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 7,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p7:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 7",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 7,
+      "end_page": 7
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p8:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p8:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 8,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p8:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 8",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 8,
+      "end_page": 8
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p9:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p9:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 9,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p9:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 9",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 9,
+      "end_page": 9
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p10:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p10:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 10,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p10:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 10",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 10,
+      "end_page": 10
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p11:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p11:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 11,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p11:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 11",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 11,
+      "end_page": 11
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p12:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p12:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 12,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p12:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 12",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 12,
+      "end_page": 12
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p13:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p13:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 13,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p13:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 13",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 13,
+      "end_page": 13
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p14:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p14:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 14,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p14:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 14",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 14,
+      "end_page": 14
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p15:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p15:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 15,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p15:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 15",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 15,
+      "end_page": 15
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p16:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p16:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 16,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p16:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 16",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 16,
+      "end_page": 16
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p17:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p17:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 17,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p17:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 17",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 17,
+      "end_page": 17
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p18:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p18:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 18,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p18:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 18",
+      "text": "- 営業利益率が高水準で拡大した\n会社はnon-GAAP operating marginが23.0%で前年比140bp上昇したと示しており、non-GAAP operating incomeも196百万USDへ増加している。売上成長に対する利益成長が強く、オペレーティングレバレッジの改善を示唆する。\nQuote: non-GAAP operating margin of 23.0% increased 140 basis points year-over-year, demonstrating leverage on sales and marketing.\n- 会社はQ4にCapExが高まり、FY26通期でも高シングルディジット対売上比率になると説明している。\n会社側テキストで、データセンター機器とZero Trust Branch appliancesの投資を前倒しし、Q4に高いCapExを見込むと明示。さらにFY27ではCapEx比率がFY26より最大200bp上昇する可能性が示され、将来FCFの押し下げ要因として重要。\nQuote: This is pulling forward some of the investments we expected to make in fiscal 2027 into Q4. As a result, we expect higher capex in Q4, taking fiscal 2026 capex to the high single-digits as a percent of revenue, up from our prior expectation of mid single-digits.\n- 期末現金等は3.5B USD、負債は1.7B USDで、現時点の流動性は厚い。\n会社説明では期末にcash, cash equivalents, and short-term investments が3.5B USD、debt が1.7B USD。短期的な資金繰り制約は強く示されていない。\nQuote: we ended the quarter with $3.5 billion in cash, cash equivalents, and short-term investments, and $1.7 billion of debt.\n- 今後はcapex増加でFCFが圧迫される可能性がある\n会社は、メモリ・ストレージ・プロセッサ価格上昇への対応としてQ4に投資を前倒しし、FY2026 capexは売上高比の高い1桁台に上昇すると説明した。さらにFY2027はFY2026比でcapex比率が最大200bp上昇する見通しを示しており、将来FCFには逆風。\nQuote: We expect higher capex in Q4, taking fiscal 2026 capex to the high single-digits as a percent of revenue... Looking ahead to fiscal 2027... we expect capex as a percentage of revenue to increase up to 200 basis points compared to fiscal 2026 levels.\n- FCFマージンは前年16.0%で、会社は回収タイミングの影響を明示している。\n会社はQ3のfree cash flow margin が16.0%で、前年の18.0%から低下したと説明し、その理由として cash collections の timing を挙げている。これはFCFの質が一部タイミング要因に左右されていることを示す。\nQuote: this quarter, down from 18.0% last year, reflecting the timing of cash collections\n- Q3のFCFマージン低下は回収タイミング要因と説明され、短期の変動余地がある\nQ3のFCFマージンは16%で、前年18%から低下したと説明され、その要因としてcash collectionsのtimingが挙げられた。FCFの短期変動が営業成績以外の要因にも左右されることを示す。\nQuote: This equates to a free cash flow margin of 16.0% this quarter, down from 18.0% last year, reflecting the timing of cash collections",
+      "start_page": 18,
+      "end_page": 18
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p19:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p19:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 19,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p19:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 19",
+      "text": "- ガイダンスは人事移行リスクを織り込んでいる\nQ4および通期ガイダンスについて、期末に2名の営業リーダーが退任したため、会社は慎重なアプローチを取っていると明示した。これは継続的な売上成長の見通しに対する執行リスクを示す。\nQuote: At the end of the third quarter, two sales leaders departed the company... we are taking a prudent approach to our guidance during the transition.\n- 会社はFCF計算上、今後のCapEx上昇を明示しており、近い将来のFCF拡大を抑える可能性がある。\nQ4の高CapEx見込みに加え、FY27ではCapEx as a percentage of revenue がFY26比で最大200bp上昇する可能性が示されている。FCFはOCFから投資を差し引くため、この増加はFCF拡大に逆風。\nQuote: Looking ahead to fiscal 2027, based on higher prices we see in the market today, we expect capex as a percentage of revenue to increase up to 200 basis points compared to fiscal 2026 levels.",
+      "start_page": 19,
+      "end_page": 19
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p20:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p20:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 20,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p20:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 20",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 20,
+      "end_page": 20
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p21:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p21:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 21,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p21:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 21",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 21,
+      "end_page": 21
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p22:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p22:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 22,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p22:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 22",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 22,
+      "end_page": 22
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p23:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p23:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 23,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p23:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 23",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 23,
+      "end_page": 23
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p24:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p24:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 24,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p24:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 24",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 24,
+      "end_page": 24
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p25:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p25:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 25,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p25:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 25",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 25,
+      "end_page": 25
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p26:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p26:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 26,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p26:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 26",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 26,
+      "end_page": 26
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p27:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p27:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 27,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p27:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 27",
+      "text": "- 粗利率は高位を維持した\nshareholder letterのAppendixではnon-GAAP gross marginが81%で、前年同期80%から高位で推移している。粗利率の安定は売上品質と収益性の両面でプラス。\nQuote: Non-GAAP gross margin 81 % 80 % 81 %",
+      "start_page": 27,
+      "end_page": 27
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p28:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p28:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 28,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p28:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 28",
+      "text": "- EPSは調整後ベースで、GAAP利益は赤字だった\nAppendixではGAAP net income lossが(13.883)百万USD、GAAP EPSが(0.09)である一方、non-GAAP EPSは1.08。headline EPSの質は調整項目の影響を受けている。\nQuote: GAAP net income (loss) per share, diluted $(0.09) ... Non-GAAP net income per share, diluted $1.08",
+      "start_page": 28,
+      "end_page": 28
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p29:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p29:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 29,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p29:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 29",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 29,
+      "end_page": 29
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p30:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p30:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 30,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p30:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 30",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 30,
+      "end_page": 30
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p31:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p31:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 31,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p31:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 31",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 31,
+      "end_page": 31
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p32:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p32:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 32,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p32:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 32",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 32,
+      "end_page": 32
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p33:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p33:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 33,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p33:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 33",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 33,
+      "end_page": 33
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p34:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p34:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 34,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p34:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 34",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 34,
+      "end_page": 34
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p35:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p35:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 35,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p35:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 35",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 35,
+      "end_page": 35
+    },
+    {
+      "section_id": "zs-fy2026-q3-shareholder-letter:p36:section-1",
+      "source_ref": {
+        "source_id": "zs-fy2026-q3-shareholder-letter:p36:section-1",
+        "document_id": "zs-fy2026-q3-shareholder-letter",
+        "page": 36,
+        "section_id": "zs-fy2026-q3-shareholder-letter:p36:section-1",
+        "title": "ZS FY2026 Q3 shareholder letter",
+        "source_type": "earnings_presentation"
+      },
+      "heading": "ZS FY2026 Q3 shareholder letter - page 36",
+      "text": "ZS FY2026 Q3 shareholder letter source section retained for source-manifest traceability.",
+      "start_page": 36,
+      "end_page": 36
+    }
+  ],
+  "availability": [
+    {
+      "key": "input_profile",
+      "status": "available",
+      "reason": "Input profile: yfinance_sec_presentation_tagged",
+      "blocks_verdict": false
+    },
+    {
+      "key": "revenue",
+      "status": "available",
+      "reason": "Required canonical metric revenue is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "eps",
+      "status": "available",
+      "reason": "Required canonical metric eps is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "operating_cash_flow",
+      "status": "available",
+      "reason": "Required canonical metric operating_cash_flow is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "capex",
+      "status": "available",
+      "reason": "Required canonical metric capex is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "free_cash_flow",
+      "status": "available",
+      "reason": "Required canonical metric free_cash_flow is available.",
+      "source_type": "derived_metric",
+      "blocks_verdict": false
+    },
+    {
+      "key": "previous_quarter:revenue",
+      "status": "available",
+      "reason": "Required canonical metric previous_quarter:revenue is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "previous_quarter:eps",
+      "status": "available",
+      "reason": "Required canonical metric previous_quarter:eps is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "previous_quarter:operating_cash_flow",
+      "status": "available",
+      "reason": "Required canonical metric previous_quarter:operating_cash_flow is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "previous_quarter:capex",
+      "status": "available",
+      "reason": "Required canonical metric previous_quarter:capex is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "previous_quarter:free_cash_flow",
+      "status": "available",
+      "reason": "Required canonical metric previous_quarter:free_cash_flow is available.",
+      "source_type": "derived_metric",
+      "blocks_verdict": false
+    },
+    {
+      "key": "year_ago_quarter:revenue",
+      "status": "available",
+      "reason": "Required canonical metric year_ago_quarter:revenue is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "year_ago_quarter:eps",
+      "status": "available",
+      "reason": "Required canonical metric year_ago_quarter:eps is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "year_ago_quarter:operating_cash_flow",
+      "status": "available",
+      "reason": "Required canonical metric year_ago_quarter:operating_cash_flow is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "year_ago_quarter:capex",
+      "status": "available",
+      "reason": "Required canonical metric year_ago_quarter:capex is available.",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    },
+    {
+      "key": "year_ago_quarter:free_cash_flow",
+      "status": "available",
+      "reason": "Required canonical metric year_ago_quarter:free_cash_flow is available.",
+      "source_type": "derived_metric",
+      "blocks_verdict": false
+    },
+    {
+      "key": "period_verification",
+      "status": "available",
+      "reason": "Period verification: verified",
+      "source_type": "financial_api",
+      "blocks_verdict": false
+    }
+  ],
+  "source_manifest": [
+    {
+      "source_id": "financial_api:ZS:2026Q3:sec:0001713683:revenue",
+      "source_type": "financial_api",
+      "title": "SEC Company Facts RevenueFromContractWithCustomerExcludingAssessedTax period_role=actual method=direct_quarter form=10-Q end=2026-04-30 accn=0001713683-26-000096",
+      "metric_name": "revenue",
+      "reported_period": "2026Q3",
+      "as_of_date": "2026-05-26",
+      "provider": "sec_company_facts",
+      "provider_column_date": "2026-04-30",
+      "period_role": "actual"
+    },
+    {
+      "source_id": "financial_api:ZS:2026Q3:sec:0001713683:operating_cash_flow",
+      "source_type": "financial_api",
+      "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=actual method=ytd_difference form=10-Q end=2026-04-30 accn=0001713683-26-000096 prior_end=2026-01-31 prior_accn=0001713683-26-000048",
+      "metric_name": "operating_cash_flow",
+      "reported_period": "2026Q3",
+      "as_of_date": "2026-05-26",
+      "provider": "sec_company_facts",
+      "provider_column_date": "2026-04-30",
+      "period_role": "actual"
+    },
+    {
+      "source_id": "financial_api:ZS:2026Q3:sec:0001713683:capex",
+      "source_type": "financial_api",
+      "title": "SEC Company Facts PaymentsToAcquirePropertyPlantAndEquipment period_role=actual method=ytd_difference form=10-Q end=2026-04-30 accn=0001713683-26-000096 prior_end=2026-01-31 prior_accn=0001713683-26-000048",
+      "metric_name": "capex",
+      "reported_period": "2026Q3",
+      "as_of_date": "2026-05-26",
+      "provider": "sec_company_facts",
+      "provider_column_date": "2026-04-30",
+      "period_role": "actual"
+    },
+    {
+      "source_id": "financial_api:ZS:2026Q3:yf:eps",
+      "source_type": "financial_api",
+      "title": "yfinance verified-period metric",
+      "metric_name": "eps",
+      "reported_period": "2026Q3",
+      "provider": "yfinance",
+      "provider_row_date": "2026-05-26",
+      "period_role": "actual"
+    },
+    {
+      "source_id": "financial_api:ZS:2026Q3:yf:consensus:eps_consensus",
+      "source_type": "financial_api",
+      "title": "yfinance verified-period metric",
+      "metric_name": "eps_consensus",
+      "reported_period": "2026Q3",
+      "provider": "yfinance",
+      "provider_row_date": "2026-05-26",
+      "period_role": "consensus"
+    },
+    {
+      "source_id": "financial_api:ZS:2026Q3:yf:pq:eps",
+      "source_type": "financial_api",
+      "title": "yfinance verified-period metric",
+      "metric_name": "eps",
+      "reported_period": "2026Q3",
+      "provider": "yfinance",
+      "provider_row_date": "2026-02-26",
+      "period_role": "previous_quarter"
+    },
+    {
+      "source_id": "financial_api:ZS:2026Q3:yf:ya:eps",
+      "source_type": "financial_api",
+      "title": "yfinance verified-period metric",
+      "metric_name": "eps",
+      "reported_period": "2026Q3",
+      "provider": "yfinance",
+      "provider_row_date": "2025-05-29",
+      "period_role": "year_ago_quarter"
+    },
+    {
+      "source_id": "financial_api:ZS:2026Q3:sec:0001713683:pq:revenue",
+      "source_type": "financial_api",
+      "title": "SEC Company Facts RevenueFromContractWithCustomerExcludingAssessedTax period_role=previous_quarter method=direct_quarter form=10-Q end=2026-01-31 accn=0001713683-26-000048",
+      "metric_name": "revenue",
+      "reported_period": "2026Q3",
+      "as_of_date": "2026-02-26",
+      "provider": "sec_company_facts",
+      "provider_column_date": "2026-01-31",
+      "period_role": "previous_quarter"
+    },
+    {
+      "source_id": "financial_api:ZS:2026Q3:sec:0001713683:pq:operating_cash_flow",
+      "source_type": "financial_api",
+      "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=previous_quarter method=ytd_difference form=10-Q end=2026-01-31 accn=0001713683-26-000048 prior_end=2025-10-31 prior_accn=0001713683-25-000205",
+      "metric_name": "operating_cash_flow",
+      "reported_period": "2026Q3",
+      "as_of_date": "2026-02-26",
+      "provider": "sec_company_facts",
+      "provider_column_date": "2026-01-31",
+      "period_role": "previous_quarter"
+    },
+    {
+      "source_id": "financial_api:ZS:2026Q3:sec:0001713683:pq:capex",
+      "source_type": "financial_api",
+      "title": "SEC Company Facts PaymentsToAcquirePropertyPlantAndEquipment period_role=previous_quarter method=ytd_difference form=10-Q end=2026-01-31 accn=0001713683-26-000048 prior_end=2025-10-31 prior_accn=0001713683-25-000205",
+      "metric_name": "capex",
+      "reported_period": "2026Q3",
+      "as_of_date": "2026-02-26",
+      "provider": "sec_company_facts",
+      "provider_column_date": "2026-01-31",
+      "period_role": "previous_quarter"
+    },
+    {
+      "source_id": "financial_api:ZS:2026Q3:sec:0001713683:ya:revenue",
+      "source_type": "financial_api",
+      "title": "SEC Company Facts RevenueFromContractWithCustomerExcludingAssessedTax period_role=year_ago_quarter method=direct_quarter form=10-Q end=2025-04-30 accn=0001713683-26-000096",
+      "metric_name": "revenue",
+      "reported_period": "2026Q3",
+      "as_of_date": "2026-05-26",
+      "provider": "sec_company_facts",
+      "provider_column_date": "2025-04-30",
+      "period_role": "year_ago_quarter"
+    },
+    {
+      "source_id": "financial_api:ZS:2026Q3:sec:0001713683:ya:operating_cash_flow",
+      "source_type": "financial_api",
+      "title": "SEC Company Facts NetCashProvidedByUsedInOperatingActivities period_role=year_ago_quarter method=ytd_difference form=10-Q end=2025-04-30 accn=0001713683-26-000096 prior_end=2025-01-31 prior_accn=0001713683-26-000048",
+      "metric_name": "operating_cash_flow",
+      "reported_period": "2026Q3",
+      "as_of_date": "2026-05-26",
+      "provider": "sec_company_facts",
+      "provider_column_date": "2025-04-30",
+      "period_role": "year_ago_quarter"
+    },
+    {
+      "source_id": "financial_api:ZS:2026Q3:sec:0001713683:ya:capex",
+      "source_type": "financial_api",
+      "title": "SEC Company Facts PaymentsToAcquirePropertyPlantAndEquipment period_role=year_ago_quarter method=ytd_difference form=10-Q end=2025-04-30 accn=0001713683-26-000096 prior_end=2025-01-31 prior_accn=0001713683-26-000048",
+      "metric_name": "capex",
+      "reported_period": "2026Q3",
+      "as_of_date": "2026-05-26",
+      "provider": "sec_company_facts",
+      "provider_column_date": "2025-04-30",
+      "period_role": "year_ago_quarter"
+    },
+    {
+      "source_id": "metric:ZS:2026Q3:free_cash_flow:derived",
+      "source_type": "derived_metric",
+      "title": "Derived free cash flow",
+      "metric_name": "free_cash_flow",
+      "reported_period": "2026Q3",
+      "period_role": "actual"
+    },
+    {
+      "source_id": "metric:ZS:2026Q3:previous_quarter:free_cash_flow:derived",
+      "source_type": "derived_metric",
+      "title": "Derived free cash flow",
+      "metric_name": "free_cash_flow",
+      "reported_period": "2026Q3",
+      "period_role": "previous_quarter"
+    },
+    {
+      "source_id": "metric:ZS:2026Q3:year_ago_quarter:free_cash_flow:derived",
+      "source_type": "derived_metric",
+      "title": "Derived free cash flow",
+      "metric_name": "free_cash_flow",
+      "reported_period": "2026Q3",
+      "period_role": "year_ago_quarter"
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p1:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p1:section-1",
+      "page": 1
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p2:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p2:section-1",
+      "page": 2
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p3:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p3:section-1",
+      "page": 3
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p4:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p4:section-1",
+      "page": 4
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p5:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p5:section-1",
+      "page": 5
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p6:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p6:section-1",
+      "page": 6
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p7:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p7:section-1",
+      "page": 7
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p8:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p8:section-1",
+      "page": 8
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p9:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p9:section-1",
+      "page": 9
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p10:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p10:section-1",
+      "page": 10
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p11:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p11:section-1",
+      "page": 11
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p12:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p12:section-1",
+      "page": 12
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p13:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p13:section-1",
+      "page": 13
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p14:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p14:section-1",
+      "page": 14
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p15:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p15:section-1",
+      "page": 15
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p16:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p16:section-1",
+      "page": 16
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p17:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p17:section-1",
+      "page": 17
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p18:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p18:section-1",
+      "page": 18
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p19:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p19:section-1",
+      "page": 19
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p20:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p20:section-1",
+      "page": 20
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p21:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p21:section-1",
+      "page": 21
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p22:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p22:section-1",
+      "page": 22
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p23:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p23:section-1",
+      "page": 23
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p24:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p24:section-1",
+      "page": 24
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p25:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p25:section-1",
+      "page": 25
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p26:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p26:section-1",
+      "page": 26
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p27:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p27:section-1",
+      "page": 27
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p28:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p28:section-1",
+      "page": 28
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p29:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p29:section-1",
+      "page": 29
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p30:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p30:section-1",
+      "page": 30
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p31:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p31:section-1",
+      "page": 31
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p32:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p32:section-1",
+      "page": 32
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p33:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p33:section-1",
+      "page": 33
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p34:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p34:section-1",
+      "page": 34
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p35:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p35:section-1",
+      "page": 35
+    },
+    {
+      "source_id": "zs-fy2026-q3-shareholder-letter:p36:section-1",
+      "source_type": "earnings_presentation",
+      "document_id": "zs-fy2026-q3-shareholder-letter",
+      "title": "ZS FY2026 Q3 shareholder letter",
+      "section_id": "zs-fy2026-q3-shareholder-letter:p36:section-1",
+      "page": 36
+    }
+  ],
+  "context_budget": {
+    "max_input_tokens": 96000,
+    "max_output_tokens": 16000,
+    "max_total_tokens": 128000
+  },
+  "include_markdown": true,
+  "purpose": "earnings_review_not_investment_advice",
+  "is_investment_advice": false,
+  "dry_run": false
+}

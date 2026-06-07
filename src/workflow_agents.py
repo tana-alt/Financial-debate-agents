@@ -22,6 +22,7 @@ from . import workflow_models as _workflow_models
 from .expected_metrics import expected_metric_context
 from .llm import LLMProvider
 from .prompt_loader import build_system_prompt, resolve_skill_target
+from .runtime_config import env_float, env_int
 from .structured import StructuredOutputError, parse_model
 from .workflow_errors import WorkflowErrorCategory
 
@@ -95,6 +96,9 @@ REQUIRED_FINDING_COVERAGE_KEYS = {
 DEFAULT_AGENT_MAX_TOKENS = 8192
 DEBATE_AGENT_MAX_TOKENS = 8192
 JUDGE_AGENT_MAX_TOKENS = 12_000
+DEFAULT_AGENT_TEMPERATURE = 0.2
+JUDGE_AGENT_TEMPERATURE = 0.1
+DEFAULT_AGENT_MAX_RETRIES = 1
 
 EXPECTED_METRIC_ROLE_BY_PUBLIC_ROLE: dict[str, _workflow_models.AgentRole] = {
     "EarningsQualityAnalyst": _workflow_models.AgentRole.EARNINGS_QUALITY,
@@ -211,7 +215,7 @@ class AgentSpec:
     task_prompt: str
     role_aliases: tuple[str, ...] = ()
     max_tokens: int = DEFAULT_AGENT_MAX_TOKENS
-    temperature: float = 0.2
+    temperature: float = DEFAULT_AGENT_TEMPERATURE
 
     @property
     def accepted_role_values(self) -> tuple[str, ...]:
@@ -303,11 +307,11 @@ class WorkflowAgent:
         self,
         llm: LLMProvider,
         *,
-        max_retries: int = 1,
+        max_retries: int | None = None,
         trace_sink: list[_workflow_models.AgentExecutionTrace] | None = None,
     ):
         self.llm = llm
-        self.max_retries = max(0, max_retries)
+        self.max_retries = _agent_max_retries() if max_retries is None else max(0, max_retries)
         self.trace_sink = trace_sink
 
     def __call__(self, **context: Any) -> BaseModel:
@@ -445,8 +449,8 @@ class WorkflowAgent:
                         user=prompt,
                         output_schema=schema,
                         schema_name=self.spec.output_model.__name__,
-                        max_tokens=self.spec.max_tokens,
-                        temperature=self.spec.temperature,
+                        max_tokens=_agent_max_tokens(self.spec),
+                        temperature=_agent_temperature(self.spec),
                     ),
                     True,
                 )
@@ -457,8 +461,8 @@ class WorkflowAgent:
             self.llm.complete(
                 system=self.spec.system_prompt,
                 user=prompt,
-                max_tokens=self.spec.max_tokens,
-                temperature=self.spec.temperature,
+                max_tokens=_agent_max_tokens(self.spec),
+                temperature=_agent_temperature(self.spec),
             ),
             False,
         )
@@ -600,6 +604,48 @@ class WorkflowAgent:
 
 def _system(role: str, scope: str) -> str:
     return build_system_prompt(role, scope)
+
+
+def _agent_max_tokens(spec: AgentSpec) -> int:
+    if spec.public_role in {"BullAgent", "BearAgent"}:
+        return env_int(
+            "EARNINGS_DEBATE_DEBATE_MAX_TOKENS",
+            spec.max_tokens,
+            min_value=1,
+        )
+    if spec.public_role == "JudgeAgent":
+        return env_int(
+            "EARNINGS_DEBATE_JUDGE_MAX_TOKENS",
+            spec.max_tokens,
+            min_value=1,
+        )
+    return env_int(
+        "EARNINGS_DEBATE_AGENT_MAX_TOKENS",
+        spec.max_tokens,
+        min_value=1,
+    )
+
+
+def _agent_temperature(spec: AgentSpec) -> float:
+    if spec.public_role == "JudgeAgent":
+        return env_float(
+            "EARNINGS_DEBATE_JUDGE_TEMPERATURE",
+            spec.temperature,
+            min_value=0.0,
+        )
+    return env_float(
+        "EARNINGS_DEBATE_AGENT_TEMPERATURE",
+        spec.temperature,
+        min_value=0.0,
+    )
+
+
+def _agent_max_retries() -> int:
+    return env_int(
+        "EARNINGS_DEBATE_AGENT_MAX_RETRIES",
+        DEFAULT_AGENT_MAX_RETRIES,
+        min_value=0,
+    )
 
 
 class EarningsQualityAnalyst(WorkflowAgent):
@@ -809,7 +855,7 @@ class JudgeAgent(WorkflowAgent):
         task_prompt="JudgeDecisionSelection JSONを作成してください。",
         role_aliases=("JudgeAgent", "judge"),
         max_tokens=JUDGE_AGENT_MAX_TOKENS,
-        temperature=0.1,
+        temperature=JUDGE_AGENT_TEMPERATURE,
     )
 
 

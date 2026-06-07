@@ -29,6 +29,16 @@ CLI sample と生成済み report の対応は、システム詳細の [Canonica
 - ZS 2026Q3: `samples/request.zs-2026q3.example.json` -> `outputs/sample-zs-20260607/report.md`
 
 API key なしで CLI の動作確認をする場合は、下の `Minimal Run` のように `LLM_PROVIDER=fake` を指定します。
+=======
+# Earnings Debate Agent
+
+Earnings Debate Agent is a fixed-workflow multi-agent system for quarterly
+earnings review. It normalizes financial metrics and earnings documents, routes
+role-scoped context to specialist agents, compares Bull and Bear cases, and
+renders a source-backed Markdown report. It generates analysis artifacts; it
+does not provide investment advice, trading recommendations, target prices, or
+automated trading.
+
 
 ## Repository Structure
 
