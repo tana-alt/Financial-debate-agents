@@ -60,6 +60,19 @@ The command writes:
 /tmp/earnings-nvda-demo/report.md
 ```
 
+## Samples
+
+The canonical sample requests and generated reports are listed in
+[Canonical Samples And Outputs](docs/system/earnings-review-system.md#5-canonical-samples-and-outputs).
+
+- NVDA 2027Q1: `samples/request.nvda-2027q1.example.json` maps to
+  `outputs/sample-nvda-20260607/report.md`
+- ZS 2026Q3: `samples/request.zs-2026q3.example.json` maps to
+  `outputs/sample-zs-20260607/report.md`
+
+Run samples without API keys by setting `LLM_PROVIDER=fake`, as shown in
+`Minimal Run`.
+
 1. タスクを自動化しようと思った動機
 - 私は株式投資を行なっており、投資している銘柄や監視銘柄は毎四半期ごとに決算の内容を確認している。
 - これを継続的なタスクとみなし、客観的な視点からの決算分析の自動化は将来的なタイムパフォーマンスを考えると非常に有用だと考えた。
