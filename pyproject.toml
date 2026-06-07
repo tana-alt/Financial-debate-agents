@@ -59,12 +59,10 @@ dev = [
 line-length = 100
 target-version = "py312"
 extend-exclude = [
-    ".agents/skills",
     ".codex/skills",
     "archive",
     "data",
     "outputs",
-    "plugins",
     "samples/cache",
 ]
 
