@@ -10,6 +10,7 @@ from src.preprocessor import (
     build_normalized_review_request,
     calculate_surprise_pct,
     document_files_to_sections,
+    fetch_filing_html,
     safe_float,
     segment_filing,
 )
@@ -601,6 +602,17 @@ def test_segment_filing_extracts_semantic_sections():
     assert all(str(section.source_ref.url) == filing_url for section in sections)
 
 
+def test_segment_filing_uses_env_section_cap(monkeypatch):
+    monkeypatch.setenv("EARNINGS_DEBATE_MAX_DOCUMENT_SECTION_CHARS", "40")
+    html = "<html><body><p>net revenue " + ("x" * 100) + "</p></body></html>"
+
+    sections = segment_filing(html, url="https://www.sec.gov/Archives/example/sample.htm")
+
+    assert len(sections) == 1
+    assert sections[0].heading == "revenue"
+    assert len(sections[0].text) == 40
+
+
 def test_document_files_to_sections_extracts_local_text_fixture():
     sections = document_files_to_sections(
         [
@@ -622,6 +634,55 @@ def test_document_files_to_sections_extracts_local_text_fixture():
     assert section.source_ref.section_id == "sample-presentation:section-1"
     assert section.source_ref.title == "Sample earnings presentation"
     assert "Free cash flow was pressured" in section.text
+
+
+def test_document_files_to_sections_uses_env_chunk_cap(monkeypatch, tmp_path):
+    monkeypatch.setenv("EARNINGS_DEBATE_MAX_DOCUMENT_SECTION_CHARS", "20")
+    source = tmp_path / "presentation.txt"
+    source.write_text("A" * 45, encoding="utf-8")
+
+    sections = document_files_to_sections(
+        [
+            DocumentFile(
+                path=str(source),
+                source_type="earnings_presentation",
+                document_id="sample-presentation",
+                title="Sample earnings presentation",
+            )
+        ]
+    )
+
+    assert [len(section.text) for section in sections] == [20, 20, 5]
+
+
+def test_fetch_filing_html_uses_env_cache_key_length_dir_and_timeout(monkeypatch, tmp_path):
+    captured = {}
+
+    class FakeResponse:
+        text = "<html>mock filing</html>"
+
+        def raise_for_status(self):
+            return None
+
+    def fake_get(url, headers, timeout):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["timeout"] = timeout
+        return FakeResponse()
+
+    cache_dir = tmp_path / "filing-cache"
+    monkeypatch.setenv("EARNINGS_DEBATE_SEC_FILING_CACHE_DIR", str(cache_dir))
+    monkeypatch.setenv("EARNINGS_DEBATE_SEC_CACHE_KEY_LENGTH", "8")
+    monkeypatch.setenv("EARNINGS_DEBATE_SEC_REQUEST_TIMEOUT_SECONDS", "12.5")
+    monkeypatch.setattr("requests.get", fake_get)
+
+    html = fetch_filing_html("https://www.sec.gov/Archives/example/sample.htm")
+
+    assert html == "<html>mock filing</html>"
+    assert captured["timeout"] == 12.5
+    cached_files = list(cache_dir.glob("*.html"))
+    assert len(cached_files) == 1
+    assert len(cached_files[0].stem) == 8
 
 
 @pytest.mark.parametrize(

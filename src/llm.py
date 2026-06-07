@@ -15,7 +15,12 @@ from dataclasses import dataclass
 from threading import Lock
 from typing import Any
 
+from .runtime_config import env_float, env_int
 from .workflow_errors import WorkflowErrorCategory
+
+LLM_DEFAULT_MAX_TOKENS = 2048
+LLM_DEFAULT_TEMPERATURE = 0.7
+OPENAI_MIN_COMPLETION_TOKENS = 4096
 
 
 @dataclass
@@ -48,8 +53,8 @@ class LLMProvider(ABC):
         self,
         system: str,
         user: str,
-        max_tokens: int = 2048,
-        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
     ) -> LLMResponse: ...
 
     def complete_structured(
@@ -59,8 +64,8 @@ class LLMProvider(ABC):
         *,
         output_schema: Mapping[str, Any],
         schema_name: str,
-        max_tokens: int = 2048,
-        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
     ) -> LLMResponse:
         return self.complete(
             system=system,
@@ -79,7 +84,15 @@ class AnthropicProvider(LLMProvider):
             model if model is not None else os.getenv("ANTHROPIC_MODEL") or "claude-sonnet-4-5"
         )
 
-    def complete(self, system, user, max_tokens=2048, temperature=0.7):
+    def complete(
+        self,
+        system: str,
+        user: str,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+    ) -> LLMResponse:
+        max_tokens = _llm_default_max_tokens(max_tokens)
+        temperature = _llm_default_temperature(temperature)
         try:
             resp = self.client.messages.create(
                 model=self.model,
@@ -91,7 +104,7 @@ class AnthropicProvider(LLMProvider):
         except Exception as exc:
             raise _map_provider_exception("anthropic", exc) from exc
         return LLMResponse(
-            text=resp.content[0].text,
+            text=getattr(resp.content[0], "text"),
             input_tokens=resp.usage.input_tokens,
             output_tokens=resp.usage.output_tokens,
         )
@@ -106,7 +119,15 @@ class OpenAIProvider(LLMProvider):
             model if model is not None else os.getenv("OPENAI_MODEL") or "gpt-5.4-mini"
         )
 
-    def complete(self, system, user, max_tokens=2048, temperature=0.7):
+    def complete(
+        self,
+        system: str,
+        user: str,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+    ) -> LLMResponse:
+        max_tokens = _llm_default_max_tokens(max_tokens)
+        temperature = _llm_default_temperature(temperature)
         params = self._completion_params(system, user, max_tokens, temperature)
         return self._create_completion(params)
 
@@ -117,9 +138,11 @@ class OpenAIProvider(LLMProvider):
         *,
         output_schema: Mapping[str, Any],
         schema_name: str,
-        max_tokens: int = 2048,
-        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
     ) -> LLMResponse:
+        max_tokens = _llm_default_max_tokens(max_tokens)
+        temperature = _llm_default_temperature(temperature)
         params = self._completion_params(system, user, max_tokens, temperature)
         params["response_format"] = {
             "type": "json_schema",
@@ -146,7 +169,7 @@ class OpenAIProvider(LLMProvider):
             ],
         }
         if _openai_uses_max_completion_tokens(self.model):
-            params["max_completion_tokens"] = max(max_tokens, 4096)
+            params["max_completion_tokens"] = max(max_tokens, _openai_min_completion_tokens())
         else:
             params["max_tokens"] = max_tokens
             params["temperature"] = temperature
@@ -168,6 +191,34 @@ class OpenAIProvider(LLMProvider):
 def _openai_uses_max_completion_tokens(model: str) -> bool:
     normalized = model.lower()
     return normalized.startswith(("gpt-5", "o1", "o3", "o4"))
+
+
+def _llm_default_max_tokens(value: int | None = None) -> int:
+    if value is not None:
+        return value
+    return env_int(
+        "EARNINGS_DEBATE_LLM_DEFAULT_MAX_TOKENS",
+        LLM_DEFAULT_MAX_TOKENS,
+        min_value=1,
+    )
+
+
+def _llm_default_temperature(value: float | None = None) -> float:
+    if value is not None:
+        return value
+    return env_float(
+        "EARNINGS_DEBATE_LLM_DEFAULT_TEMPERATURE",
+        LLM_DEFAULT_TEMPERATURE,
+        min_value=0.0,
+    )
+
+
+def _openai_min_completion_tokens() -> int:
+    return env_int(
+        "EARNINGS_DEBATE_OPENAI_MIN_COMPLETION_TOKENS",
+        OPENAI_MIN_COMPLETION_TOKENS,
+        min_value=1,
+    )
 
 
 CONFIG_STATUS_CODES = {400, 401, 403, 404, 422}
@@ -249,9 +300,11 @@ class FakeProvider(LLMProvider):
         self,
         system: str,
         user: str,
-        max_tokens: int = 2048,
-        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
     ) -> LLMResponse:
+        _llm_default_max_tokens(max_tokens)
+        _llm_default_temperature(temperature)
         role = self._role_from_system(system)
         positive_source_ref, negative_source_ref = self._source_refs_from_user(user)
         with self._lock:

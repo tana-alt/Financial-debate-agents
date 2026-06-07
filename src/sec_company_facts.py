@@ -11,6 +11,7 @@ from typing import Any
 import requests
 
 from .metric_normalizer import SOURCE_ALIASES
+from .runtime_config import env_float
 from .workflow_models import (
     AvailabilityItem,
     AvailabilityStatus,
@@ -22,6 +23,7 @@ from .workflow_models import (
 
 SEC_PROVIDER = "sec_company_facts"
 SEC_PERIOD_END_TOLERANCE_DAYS = 15
+SEC_REQUEST_TIMEOUT_SECONDS = 30.0
 SEC_P0_METRICS = ("revenue", "operating_cash_flow", "capex")
 SEC_FORMS = {"10-Q", "10-K", "10-Q/A", "10-K/A"}
 SEC_COMPARISON_PERIOD_ROLES = (
@@ -59,7 +61,7 @@ def fetch_sec_company_facts(
     resolved_cik = cik if cik is not None else resolve_cik(ticker, session=sec_session)
     response = sec_session.get(
         f"https://data.sec.gov/api/xbrl/companyfacts/CIK{resolved_cik:010d}.json",
-        timeout=30,
+        timeout=_sec_request_timeout_seconds(),
     )
     response.raise_for_status()
     return response.json(), resolved_cik
@@ -67,7 +69,10 @@ def fetch_sec_company_facts(
 
 def resolve_cik(ticker: str, *, session: requests.Session | None = None) -> int:
     sec_session = session or _sec_session()
-    response = sec_session.get("https://www.sec.gov/files/company_tickers.json", timeout=30)
+    response = sec_session.get(
+        "https://www.sec.gov/files/company_tickers.json",
+        timeout=_sec_request_timeout_seconds(),
+    )
     response.raise_for_status()
     ticker_map = response.json()
     normalized = ticker.upper()
@@ -509,3 +514,11 @@ def _sec_session() -> requests.Session:
         }
     )
     return session
+
+
+def _sec_request_timeout_seconds() -> float:
+    return env_float(
+        "EARNINGS_DEBATE_SEC_REQUEST_TIMEOUT_SECONDS",
+        SEC_REQUEST_TIMEOUT_SECONDS,
+        min_value=0.0,
+    )

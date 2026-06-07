@@ -84,6 +84,28 @@ def test_openai_provider_keeps_max_tokens_for_legacy_chat_models():
     assert "max_completion_tokens" not in params
 
 
+def test_openai_provider_uses_env_defaults_when_call_tokens_are_omitted(monkeypatch):
+    monkeypatch.setenv("EARNINGS_DEBATE_LLM_DEFAULT_MAX_TOKENS", "777")
+    monkeypatch.setenv("EARNINGS_DEBATE_LLM_DEFAULT_TEMPERATURE", "0.33")
+    provider, client = _provider("gpt-4o")
+
+    provider.complete("system", "user")
+
+    params = client.chat.completions.params
+    assert params["max_tokens"] == 777
+    assert params["temperature"] == 0.33
+
+
+def test_openai_provider_uses_env_minimum_completion_tokens(monkeypatch):
+    monkeypatch.setenv("EARNINGS_DEBATE_OPENAI_MIN_COMPLETION_TOKENS", "2048")
+    provider, client = _provider("gpt-5.4-mini")
+
+    provider.complete("system", "user", max_tokens=123, temperature=0.2)
+
+    params = client.chat.completions.params
+    assert params["max_completion_tokens"] == 2048
+
+
 def test_openai_provider_maps_auth_failure_to_provider_config():
     provider, _client = _provider(
         "gpt-4o",

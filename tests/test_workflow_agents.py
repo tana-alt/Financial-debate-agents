@@ -602,6 +602,47 @@ def test_debate_and_judge_output_token_caps_are_raised_for_real_llm_stability():
     assert JudgeAgent.spec.max_tokens >= 12_000
 
 
+def test_specialist_agent_uses_env_tokens_temperature_and_retry_default(monkeypatch):
+    monkeypatch.setenv("EARNINGS_DEBATE_AGENT_MAX_TOKENS", "3333")
+    monkeypatch.setenv("EARNINGS_DEBATE_AGENT_TEMPERATURE", "0.4")
+    monkeypatch.setenv("EARNINGS_DEBATE_AGENT_MAX_RETRIES", "1")
+    llm = FakeLLM(["not json", earnings_quality_json()])
+    agent = EarningsQualityAnalyst(llm)
+
+    result = agent.run({"run_spec": {"ticker": "NVDA"}})
+
+    assert result.agent_name == "EarningsQualityAnalyst"
+    assert len(llm.calls) == 2
+    assert {call["max_tokens"] for call in llm.calls} == {3333}
+    assert {call["temperature"] for call in llm.calls} == {0.4}
+
+
+def test_debate_and_judge_agents_use_role_specific_env_tokens_and_temperature(monkeypatch):
+    monkeypatch.setenv("EARNINGS_DEBATE_DEBATE_MAX_TOKENS", "4444")
+    monkeypatch.setenv("EARNINGS_DEBATE_AGENT_TEMPERATURE", "0.35")
+    monkeypatch.setenv("EARNINGS_DEBATE_JUDGE_MAX_TOKENS", "5555")
+    monkeypatch.setenv("EARNINGS_DEBATE_JUDGE_TEMPERATURE", "0.05")
+
+    bull_llm = FakeLLM([bull_json()])
+    bull = BullAgent(bull_llm).run({"analysis_brief": {"summary": "brief"}})
+    judge_llm = FakeLLM([judge_json()])
+    judge = JudgeAgent(judge_llm).run(
+        {
+            "run_spec": {"ticker": "NVDA", "fiscal_period": "2025Q3"},
+            "analysis_brief": {"summary": "Validated brief"},
+            "bull_case": {"agent_name": "bull_agent"},
+            "bear_case": {"agent_name": "bear_agent"},
+        }
+    )
+
+    assert bull.agent_name == "bull_agent"
+    assert judge.verdict.value == "neutral"
+    assert bull_llm.calls[0]["max_tokens"] == 4444
+    assert bull_llm.calls[0]["temperature"] == 0.35
+    assert judge_llm.calls[0]["max_tokens"] == 5555
+    assert judge_llm.calls[0]["temperature"] == 0.05
+
+
 def test_agent_records_attempt_trace_for_retry_and_token_usage():
     traces = []
     llm = FakeLLM(["not json", earnings_quality_json()])
