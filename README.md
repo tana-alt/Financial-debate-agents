@@ -1,80 +1,15 @@
 1. タスクを自動化しようと思った動機
-私は株式投資を行なっており、投資している銘柄や監視銘柄は毎四半期ごとに決算の内容を確認している。
-これを継続的なタスクとみなし、客観的な視点からの決算分析の自動化は将来的なタイムパフォーマンスを考えると非常に有用だと考えた。そのため、EPS、P&L、FCF等の持続性と市場コンセンサスとの乖離という私が普段注目している視点から決算を分析して決算の良し悪しを判定する固定ワークフローのマルチエージェントシステムを開発した。
+- 私は株式投資を行なっており、投資している銘柄や監視銘柄は毎四半期ごとに決算の内容を確認している。
+- これを継続的なタスクとみなし、客観的な視点からの決算分析の自動化は将来的なタイムパフォーマンスを考えると非常に有用だと考えた。
+- そのため、EPS、P&L、FCF等の持続性と市場コンセンサスとの乖離という私が普段注目している視点から決算を分析して決算の良し悪しを判定する固定ワークフローのマルチエージェントシステムを開発した。
 
 2. システム設計上の設計思想
-本システムは投資助言を行わず、分析する決算は評価対象の決算に加えて前四半期と前年同四半期の決算に特定し、DCF法などのバリュエーションモデルに基づく分析は行わないこととした。
-決算情報に対するバイアスを取り除くため、分析結果に基づきBull派とBear派が出した論点に基づきJudgeが決算の良し悪しを判断させるようにした。
-また、再現性と検証可能性を高めるために固定ワークフローによってエージェントを呼び出し、各エージェントには特定の業務内容を指定し、各主張に対して根拠を添付させるようにした。
-すべてのエージェントに全データを渡すのではなく、ContextRouterによってEPSやFCFを見るエージェントには正規化済み財務データを中心に渡し、経営層のコメントやガイダンスを見るエージェントには決算資料由来の補助情報を渡すようにした。これにより、無料APIやPDF抽出由来のノイズを減らし、各エージェントが自分の業務に集中できるようにした。
-API Keyやモデル名などは環境変数で管理し、CLIとしてLLMを呼び出さなくてもワークフローの実行可能性の確認ができるようにした。
+- 本システムは投資助言を行わず、分析する決算は評価対象の決算に加えて前四半期と前年同四半期の決算に特定し、DCF法などのバリュエーションモデルに基づく分析は行わないこととした。
+- EPS、FCF、guidance、management comment など評価軸を固定し、BullととBear, Judgeで論点を分離することで、分析の揺れを小さくするようにした。
+- また、決算レビューは四半期ごとに繰り返す定型業務なので、LLMに自由推論させるより、data ingestion -> routing ->specialist -> Bull/Bear -> Judge -> report の順序を固定した方が再現性・検証性が高いと判断した。LLMにMarkdownを自由生成させるのではなく、構造化出力やソースやエビデンス、主張を検証してからrendererでreport化する
+- すべてのエージェントに全データを渡すのではなく、ContextRouterによってEPSやFCFを見るエージェントには正規化済み財務データを中心に渡し、経営層のコメントやガイダンスを見るエージェントには決算資料由来の補助情報を渡すようにした。これにより、無料APIやPDF抽出由来のノイズを減らし、各エージェントが自分の業務に集中できるようにした。
+- API key、model、SEC user-agent、log level、token上限などは環境変数で管理し、CLIとしてLLMを呼び出さなくてもワークフローの実行可能性の確認ができるようにした。
 
 システムについての詳細は以下に記している。
 - システムの処理責務、workflow、data processor、context routing、validation gates、CLI/API、CI/test gates の詳細: [docs/system/earnings-review-system.md](docs/system/earnings-review-system.md)
 - 環境変数と default の一覧: [.env.example](.env.example) と [Configuration / Environment Variables](docs/system/earnings-review-system.md#configuration--environment-variables)
-
-
-要件書(ここは指示がなければ読むな)
-# 参考文献の要約
-
-## 1. Building effective agents
-
-この文献は、LLM agentを構築する際に、最初から複雑なagent frameworkや完全自律agentを使うべきではないと主張している。成功しているagentic systemの多くは、複雑な抽象化ではなく、シンプルで組み合わせ可能なworkflow patternによって構築されている。
-
-文献では、agentic systemを大きく「workflow」と「agent」に分けている。workflowは、LLMとtoolをあらかじめ決められたコードパスに沿って実行する仕組みである。一方、agentは、LLM自身が手順やtool利用を動的に決定する仕組みである。タスクが定型的で、成功条件をある程度定義できる場合には、完全自律agentよりも、明示的なworkflowの方が安定しやすい。
-
-代表的な設計パターンとして、prompt chaining、routing、parallelization、orchestrator-workers、evaluator-optimizerが紹介されている。prompt chainingでは、作業を複数ステップに分け、各段階で品質確認やgateを置くことができる。routingでは、入力内容に応じて適切な専門処理に振り分ける。parallelizationでは、複数の観点から同時に処理を行い、最終的に統合する。evaluator-optimizerでは、出力を評価し、必要に応じて改善する。
-
-この文献の中心的な教訓は、agentic systemの価値はagentの自律性の高さではなく、タスクに対して適切な制御構造を設計できているかで決まるという点である。複雑なagentはコストや遅延を増やすため、単純なworkflowで十分な場合はそちらを優先し、必要な場合にだけagent性を高めるべきだと整理できる。
-
-この考え方は、本プロジェクトの設計と対応している。本プロジェクトでは、LLMに自由に決算分析の手順を決めさせるのではなく、data ingestion、context routing、specialist agents、evidence aggregation、Bull/Bear debate、Judge、ReportRendererという明示的な順序を採用している。これは、完全自律agentではなく、決算レビューという定型業務に合わせた検証可能なworkflowを重視した設計である。
-
-## 2. Effective context engineering for AI agents
-
-この文献は、AI agentの性能を高めるためには、promptの書き方だけでなく、モデルに渡すcontext全体を設計することが重要だと説明している。context engineeringとは、LLM推論時に含まれるsystem prompt、tool定義、外部データ、会話履歴、memoryなどのtoken集合を、タスクにとって最適な形に整理・維持するための技術である。
-
-LLMのcontext windowは有限であり、情報を大量に入れれば性能が上がるわけではない。むしろ、ノイズの多い情報や不要な履歴を入れると、重要情報への注意が分散し、誤った参照やhallucinationの原因になる。そのため、agentには必要最小限で高信号なcontextを渡すべきだとされる。
-
-この文献では、context engineeringの対象はprompt本文だけではないと整理されている。tool description、取得データ、作業履歴、sub-agentに渡す情報、長期タスクで保持するメモや中間成果物もcontextに含まれる。そのため、agent systemを作る際には、どのagentに、どの情報を、どの形式で渡すかを設計する必要がある。
-
-この文献の中心的な教訓は、AI agentの失敗はモデル性能だけでなく、context設計の失敗によっても起きるという点である。特に、複数agentや長いworkflowでは、すべての情報を全agentに渡すのではなく、役割ごとに必要な情報へ絞ることが重要になる。
-
-この考え方は、本プロジェクトのContextRouterと対応している。本プロジェクトでは、すべてのagentに同じ情報を渡すのではなく、financial agentsには正規化済みの財務データを中心に渡し、presentation agentsには決算説明資料由来の定性的情報を渡す。これにより、無料APIやPDF抽出に由来するノイズを抑え、各agentが自分の責務に必要な情報だけを使って分析できるようにしている。
-
-## 3. The Twelve-Factor App
-
-The Twelve-Factor Appは、SaaSやWebアプリケーションを移植しやすく、環境差分に強く、継続的に運用しやすくするための設計原則である。この方法論は特定の言語や技術スタックに依存せず、任意のプログラミング言語や外部サービスを使うアプリに適用できる。
-
-12の原則には、コードベースを一元管理すること、依存関係を明示すること、設定をコードから分離して環境変数で管理すること、外部サービスを接続可能なリソースとして扱うこと、build、release、runを分離すること、ログをイベントストリームとして扱うことなどが含まれる。特に個人開発や課題提出において重要なのは、環境依存を減らし、他者が再現しやすい構成にすることである。
-
-この文献は、AI agentそのものについての文献ではない。しかし、LLM workflowアプリを作る場合でも、API key、model name、SEC user-agent、log levelなどをコードに埋め込まないこと、依存関係を明示すること、テストやCIで再現性を確保することは重要である。AIアプリであっても、基盤となるアプリケーション設計が不安定であれば、agentの出力も再現しにくくなる。
-
-この文献の中心的な教訓は、アプリケーションは実行環境や個人の手元環境に依存せず、設定、依存、実行方法を明確に分離すべきだという点である。特にAPIを利用するAIアプリでは、secretや設定をコードから切り離すことが重要になる。
-
-この考え方は、本プロジェクトの設定管理やテスト設計と対応している。本プロジェクトでは、API key、model設定、SEC user-agent、log levelなどをコードに直接埋め込まず、環境変数として管理する。また、fake LLM clientを用いることで、実API keyがなくてもcontract test、context routing test、renderer test、workflow testを実行できるようにしている。これにより、外部APIに依存しすぎず、主要なworkflowの再現性を確保している。
-
-## 4. Shape Up
-
-Shape Upは、Basecampが提唱するプロダクト開発手法であり、単にタスクを細かく分解して順番に消化するのではなく、事前に問題、制約、解決方針、スコープを明確にしてから開発することを重視している。重要なのは、何でも作ろうとするのではなく、限られた時間の中で意味のある成果物を出せる範囲へ仕事を整えることである。
-
-Shape Upの特徴は、fixed time, variable scopeの考え方である。これは、時間や開発枠を固定し、その中で何を実装するかを調整するという考え方である。すべてを作り切ろうとするのではなく、問題を明確にし、深追いすると危険な領域を避け、やらないことを定義し、実装可能な形に仕事を整えることが重視される。
-
-この考え方は、AIアプリ開発にも適用できる。特に金融AIのような領域では、株価予測、自動売買、投資助言、完全なvaluation model、網羅的なデータ取得などへスコープを広げると、短期間では完成しにくい。そこで、成果物の範囲を「決算レビュー資料の生成」に限定することで、限られた時間でも実際に動くworkflowとサンプル出力を作ることができる。
-
-この文献の中心的な教訓は、優れた成果物は、何でも作ることではなく、何を作らないかを明確にしたスコープ設計から生まれるという点である。課題提出においては、No-Goを定義して完成度の高い小さなworkflowに絞ったことが重要なアピールポイントになる。
-
-この考え方は、本プロジェクトのスコープ設計と対応している。本プロジェクトでは、投資助言、自動売買、株価予測をNo-Goとし、決算レビュー資料の生成にスコープを限定している。分析対象も、EPS、FCF、guidance、management comment、Bull/Bear論点整理を中心にした。これにより、金融AIとして過度に広い機能を目指すのではなく、自分が決算を見るときの情報整理業務を再現可能なworkflowとして実装することを優先している。
-
-## まとめ
-
-4本の参考文献をまとめると、本プロジェクトの設計思想は次のように整理できる。
-
-Building effective agentsからは、完全自律agentではなく、明示的で検証可能なworkflowを採用する方針を取り入れた。決算分析という比較的定型的な作業に対して、LLMに自由な手順決定を任せるのではなく、data ingestion、context routing、specialist agents、evidence aggregation、Bull/Bear debate、Judge、ReportRendererという固定された流れを設計した。
-
-Effective context engineering for AI agentsからは、agentごとに必要な情報だけを渡し、contextを分離する方針を取り入れた。無料APIやPDF抽出に由来する入力の揺れやノイズをそのまま全agentに渡すのではなく、ContextRouterによって役割ごとに必要な情報へ絞ることで、agentの責務を明確にし、出力の安定性を高めることを目指した。
-
-The Twelve-Factor Appからは、設定、依存関係、実行環境をコードから分離し、再現性を高める方針を取り入れた。API keyやmodel設定をコードに埋め込まず、環境変数として扱う。また、fake LLM clientやテストを用意することで、実API keyがなくても主要なworkflowを検証できるようにした。
-
-Shape Upからは、スコープを明確に限定し、やらないことを決める方針を取り入れた。本プロジェクトでは、投資助言、自動売買、株価予測を対象外とし、EPS、FCF、guidance、management comment、Bull/Bear論点を含む決算レビュー資料の生成に集中した。これにより、限られた開発期間でも、実際に動く成果物とサンプル出力を完成させることを優先した。
-
-以上のように、本プロジェクトは、単にLLMに決算分析をさせるものではなく、不安定な無料データソースを前提に、入力正規化、context routing、structured output、evidence gate、Bull/Bear debate、Judge、deterministic renderingを組み合わせた決算レビューworkflowとして設計したものである。
