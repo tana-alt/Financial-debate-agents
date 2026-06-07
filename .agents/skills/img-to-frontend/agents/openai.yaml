@@ -1,4 +1,0 @@
-interface:
-  display_name: "Img to Frontend"
-  short_description: "Turn selected images into coded pages."
-  default_prompt: "Use $img-to-frontend for an explicit image-first workflow: start from my supplied or selected image, or generate a few concepts if requested, then implement the chosen reference with screenshot-based iteration."
