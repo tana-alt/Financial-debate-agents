@@ -9,6 +9,78 @@ from src.preprocessor import build_financial_metrics
 from src.workflow_models import DocumentSection, SourceRef, SourceType
 
 
+def _write_document_files_payload(tmp_path):
+    payload = {
+        "request_id": "test-local-presentation-sample",
+        "ticker": "NVDA",
+        "fiscal_period": "2025Q3",
+        "include_markdown": True,
+        "financial_metrics": {
+            "ticker": "NVDA",
+            "fiscal_period": "2025Q3",
+            "currency": "USD",
+            "eps": 0.81,
+            "eps_consensus": 0.75,
+            "eps_surprise_pct": 8.0,
+            "revenue": 35000000000,
+            "revenue_consensus": 33000000000,
+            "revenue_surprise_pct": 6.06,
+            "operating_margin_pct": 62.0,
+            "operating_cash_flow": 15000000000,
+            "capex": -3000000000,
+            "source_refs": [
+                {
+                    "source_id": "financial_api:NVDA:2025Q3:yfinance:eps",
+                    "source_type": "financial_api",
+                    "metric_name": "eps",
+                    "title": "Fixture yfinance EPS",
+                    "provider": "yfinance",
+                    "reported_period": "2025Q3",
+                    "period_role": "actual",
+                },
+                {
+                    "source_id": "financial_api:NVDA:2025Q3:sec:revenue",
+                    "source_type": "financial_api",
+                    "metric_name": "revenue",
+                    "title": "Fixture SEC revenue",
+                    "provider": "sec_company_facts",
+                    "reported_period": "2025Q3",
+                    "period_role": "actual",
+                },
+                {
+                    "source_id": "financial_api:NVDA:2025Q3:sec:operating_cash_flow",
+                    "source_type": "financial_api",
+                    "metric_name": "operating_cash_flow",
+                    "title": "Fixture SEC operating cash flow",
+                    "provider": "sec_company_facts",
+                    "reported_period": "2025Q3",
+                    "period_role": "actual",
+                },
+                {
+                    "source_id": "financial_api:NVDA:2025Q3:sec:capex",
+                    "source_type": "financial_api",
+                    "metric_name": "capex",
+                    "title": "Fixture SEC capex",
+                    "provider": "sec_company_facts",
+                    "reported_period": "2025Q3",
+                    "period_role": "actual",
+                },
+            ],
+        },
+        "document_files": [
+            {
+                "path": "tests/fixtures/sample_presentation.txt",
+                "source_type": "earnings_presentation",
+                "document_id": "test-sample-presentation",
+                "title": "Test sample earnings presentation",
+            }
+        ],
+    }
+    path = tmp_path / "request.document-files.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
 def test_cli_fake_smoke_writes_report_and_workflow_result(monkeypatch, tmp_path):
     monkeypatch.setenv("LLM_PROVIDER", "fake")
     monkeypatch.setattr("src.workflow._fetch_consensus", lambda *args, **kwargs: None)
@@ -21,7 +93,7 @@ def test_cli_fake_smoke_writes_report_and_workflow_result(monkeypatch, tmp_path)
         [
             "run",
             "--input-json",
-            "samples/request.example.json",
+            "samples/request.nvda-2027q1.example.json",
             "--out",
             str(out_dir),
         ],
@@ -32,16 +104,16 @@ def test_cli_fake_smoke_writes_report_and_workflow_result(monkeypatch, tmp_path)
     workflow_result = json.loads((out_dir / "workflow_result.json").read_text(encoding="utf-8"))
 
     assert workflow_result["ticker"] == "NVDA"
-    assert workflow_result["fiscal_period"] == "2025Q3"
+    assert workflow_result["fiscal_period"] == "2027Q1"
     assert workflow_result["status"] == "completed"
     assert "claim_matrix" in workflow_result
-    assert "metric:NVDA:2025Q3:free_cash_flow:derived" in {
+    assert "metric:NVDA:2027Q1:free_cash_flow:derived" in {
         source["source_id"] for source in workflow_result["claim_matrix"]["source_manifest"]
     }
     assert workflow_result["judge_decision"]["verdict"] in {"good", "neutral", "bad"}
     for expected in (
         "NVDA",
-        "2025Q3",
+        "2027Q1",
         "## レポート前提: canonical data",
         "## 判定理由",
         "## 根拠マトリクス (Evidence Matrix)",
@@ -58,13 +130,14 @@ def test_cli_fake_smoke_accepts_document_files(monkeypatch, tmp_path):
     monkeypatch.setattr("src.workflow._fetch_filing_html", lambda *args, **kwargs: "")
 
     out_dir = tmp_path / "out"
+    input_json = _write_document_files_payload(tmp_path)
     runner = CliRunner()
     result = runner.invoke(
         cli,
         [
             "run",
             "--input-json",
-            "samples/request.document-files.example.json",
+            str(input_json),
             "--out",
             str(out_dir),
         ],
@@ -85,13 +158,14 @@ def test_cli_fake_smoke_accepts_current_local_presentation_sample(monkeypatch, t
     monkeypatch.setattr("src.workflow._fetch_filing_html", lambda *args, **kwargs: "")
 
     out_dir = tmp_path / "out"
+    input_json = _write_document_files_payload(tmp_path)
     runner = CliRunner()
     result = runner.invoke(
         cli,
         [
             "run",
             "--input-json",
-            "samples/request.current.local-presentation.example.json",
+            str(input_json),
             "--out",
             str(out_dir),
         ],
@@ -104,7 +178,37 @@ def test_cli_fake_smoke_accepts_current_local_presentation_sample(monkeypatch, t
     assert workflow_result["judge_decision"]["verdict"] in {"good", "neutral", "bad"}
     assert "## データ品質" in report
     assert "## 根拠マトリクス (Evidence Matrix)" in report
-    assert "current-sample-presentation:section-1" in report
+    assert "test-sample-presentation:section-1" in report
+
+
+def test_cli_fake_smoke_accepts_zs_canonical_sample(monkeypatch, tmp_path):
+    monkeypatch.setenv("LLM_PROVIDER", "fake")
+    monkeypatch.setattr("src.workflow._fetch_consensus", lambda *args, **kwargs: None)
+    monkeypatch.setattr("src.workflow._fetch_filing_html", lambda *args, **kwargs: "")
+
+    out_dir = tmp_path / "out"
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "run",
+            "--input-json",
+            "samples/request.zs-2026q3.example.json",
+            "--out",
+            str(out_dir),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    report = (out_dir / "report.md").read_text(encoding="utf-8")
+    workflow_result = json.loads((out_dir / "workflow_result.json").read_text(encoding="utf-8"))
+    assert workflow_result["ticker"] == "ZS"
+    assert workflow_result["fiscal_period"] == "2026Q3"
+    assert workflow_result["status"] == "completed"
+    assert "metric:ZS:2026Q3:free_cash_flow:derived" in {
+        source["source_id"] for source in workflow_result["claim_matrix"]["source_manifest"]
+    }
+    assert "## 根拠マトリクス (Evidence Matrix)" in report
 
 
 def test_cli_api_mode_posts_normalized_payload_without_raw_acquisition(monkeypatch, tmp_path):
@@ -226,7 +330,7 @@ def test_cli_api_mode_uses_env_defaults_without_overriding_explicit_args(monkeyp
         [
             "run",
             "--input-json",
-            "samples/request.example.json",
+            "samples/request.nvda-2027q1.example.json",
         ],
         env={
             "EARNINGS_DEBATE_API_URL": "http://api.env",
@@ -248,7 +352,7 @@ def test_cli_api_mode_uses_env_defaults_without_overriding_explicit_args(monkeyp
             "--api-url",
             "http://api.explicit",
             "--input-json",
-            "samples/request.example.json",
+            "samples/request.nvda-2027q1.example.json",
             "--out",
             str(explicit_out_dir),
         ],
