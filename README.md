@@ -1,3 +1,5 @@
+# Earnings Debate Agent
+
 ## 提出課題との対応
 
 このリポジトリは、私が四半期ごとに行っている米国株決算レビューを自動化するための multi-agent workflow です。
@@ -12,7 +14,7 @@
 2. システム設計上の設計思想
 参考文献を前提に以下のような設計思想で実装しました。
 - 本システムは投資助言を行わず、分析する決算は評価対象の決算に加えて前四半期と前年同四半期の決算に特定し、DCF法などのバリュエーションモデルに基づく分析は行わないこととしました。
-- EPS、FCF、guidance、management comment など評価軸を固定し、BullととBear, Judgeで論点を分離することで、分析の揺れを小さくするようにしました。
+- EPS、FCF、guidance、management comment など評価軸を固定し、Bull/BearとJudgeで論点を分離することで、分析の揺れを小さくするようにしました。
 - また、決算レビューは四半期ごとに繰り返す定型業務なので、LLMに自由推論させるより、data ingestion -> routing ->specialist -> Bull/Bear -> Judge -> report の順序を固定した方が再現性・検証性が高いと判断しました。LLMにMarkdownを自由生成させるのではなく、構造化出力やソースやエビデンス、主張を検証してからrendererでreport化しています。
 - すべてのエージェントに全データを渡すのではなく、ContextRouterによってEPSやFCFを見るエージェントには正規化済み財務データを中心に渡し、経営層のコメントやガイダンスを見るエージェントには決算資料由来の補助情報を渡すようにしました。これにより、無料APIやPDF抽出由来のノイズを減らし、各エージェントが自分の業務に集中できるようにしました。
 - API key、model、SEC user-agent、log level、token上限などは環境変数で管理し、CLIとしてLLMを呼び出さなくてもワークフローの実行可能性の確認ができるようにしました。
@@ -30,7 +32,7 @@ CLI sample と生成済み report の対応は、システム詳細の [Canonica
 
 API key なしで CLI の動作確認をする場合は、下の `Minimal Run` のように `LLM_PROVIDER=fake` を指定します。
 
-# Earnings Debate Agent
+## Description
 
 Earnings Debate Agent is a fixed-workflow multi-agent system for quarterly
 earnings review. It normalizes financial metrics and earnings documents, routes
