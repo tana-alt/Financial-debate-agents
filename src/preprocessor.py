@@ -22,6 +22,7 @@ from bs4 import BeautifulSoup
 from pydantic import ValidationError
 
 from .metric_normalizer import resolve_canonical_metric
+from .runtime_config import env_float, env_int, env_path
 from .workflow_models import (
     AvailabilityItem,
     AvailabilityStatus,
@@ -60,6 +61,9 @@ SECTION_PATTERNS = {
 
 SUPPORTED_DOCUMENT_FILE_SUFFIXES = {".pdf", ".txt", ".text", ".md"}
 MAX_DOCUMENT_SECTION_CHARS = 8000
+SEC_FILING_CACHE_DIR = Path("samples/cache")
+SEC_CACHE_KEY_LENGTH = 12
+SEC_REQUEST_TIMEOUT_SECONDS = 30.0
 NORMALIZED_REVIEW_SCHEMA_VERSION = "normalized-review-request.v1"
 DEFAULT_CONTEXT_BUDGET = {
     "max_input_tokens": 96_000,
@@ -85,7 +89,36 @@ def _normalize_document_text(text: str) -> str:
     return text.strip()
 
 
-def _chunk_text(text: str, *, max_chars: int = MAX_DOCUMENT_SECTION_CHARS) -> list[str]:
+def _max_document_section_chars() -> int:
+    return env_int(
+        "EARNINGS_DEBATE_MAX_DOCUMENT_SECTION_CHARS",
+        MAX_DOCUMENT_SECTION_CHARS,
+        min_value=1,
+    )
+
+
+def _sec_filing_cache_dir() -> Path:
+    return env_path("EARNINGS_DEBATE_SEC_FILING_CACHE_DIR", SEC_FILING_CACHE_DIR)
+
+
+def _sec_cache_key_length() -> int:
+    return env_int(
+        "EARNINGS_DEBATE_SEC_CACHE_KEY_LENGTH",
+        SEC_CACHE_KEY_LENGTH,
+        min_value=1,
+    )
+
+
+def _sec_request_timeout_seconds() -> float:
+    return env_float(
+        "EARNINGS_DEBATE_SEC_REQUEST_TIMEOUT_SECONDS",
+        SEC_REQUEST_TIMEOUT_SECONDS,
+        min_value=0.0,
+    )
+
+
+def _chunk_text(text: str, *, max_chars: int | None = None) -> list[str]:
+    max_chars = _max_document_section_chars() if max_chars is None else max_chars
     if len(text) <= max_chars:
         return [text]
 
@@ -1026,9 +1059,9 @@ def fetch_filing_html(url: str) -> str:
 
     import requests
 
-    cache_dir = Path("samples/cache")
+    cache_dir = _sec_filing_cache_dir()
     cache_dir.mkdir(parents=True, exist_ok=True)
-    key = hashlib.sha1(url.encode()).hexdigest()[:12]
+    key = hashlib.sha1(url.encode()).hexdigest()[: _sec_cache_key_length()]
     cache_path = cache_dir / f"{key}.html"
 
     if cache_path.exists():
@@ -1036,7 +1069,7 @@ def fetch_filing_html(url: str) -> str:
         return cache_path.read_text(encoding="utf-8")
 
     ua = os.getenv("SEC_USER_AGENT", "earnings-debate-agent contact@example.com")
-    r = requests.get(url, headers={"User-Agent": ua}, timeout=30)
+    r = requests.get(url, headers={"User-Agent": ua}, timeout=_sec_request_timeout_seconds())
     r.raise_for_status()
     cache_path.write_text(r.text, encoding="utf-8")
     log.info("filing.fetched", url=url, bytes=len(r.text))
@@ -1070,7 +1103,7 @@ def segment_filing(html: str, url: str | None = None) -> list[DocumentSection]:
         if not chunks:
             continue
         # Cap each section — context budget discipline
-        joined = "\n\n".join(chunks)[:8000]
+        joined = "\n\n".join(chunks)[: _max_document_section_chars()]
         section_id = f"filing:{name}"
         result.append(
             DocumentSection(

@@ -194,3 +194,102 @@ def test_cli_api_mode_posts_normalized_payload_without_raw_acquisition(monkeypat
         "financial_api:NVDA:2025Q3",
         "filing:guidance",
     }
+
+
+def test_cli_api_mode_uses_env_defaults_without_overriding_explicit_args(monkeypatch, tmp_path):
+    captured = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "ticker": "NVDA",
+                "fiscal_period": "2025Q3",
+                "judge_decision": {"verdict": "neutral", "confidence": 0.5},
+                "markdown_report": "# Earnings Review\n\n## Verdict\n\nNeutral",
+            }
+
+    def fake_post(url, json, timeout):
+        captured["url"] = url
+        captured["json"] = json
+        captured["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr("src.main.requests.post", fake_post)
+
+    env_out_dir = tmp_path / "env-out"
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "run",
+            "--input-json",
+            "samples/request.example.json",
+        ],
+        env={
+            "EARNINGS_DEBATE_API_URL": "http://api.env",
+            "EARNINGS_DEBATE_OUTPUT_DIR": str(env_out_dir),
+            "EARNINGS_DEBATE_API_REQUEST_TIMEOUT_SECONDS": "12.5",
+        },
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["url"] == "http://api.env/reviews"
+    assert captured["timeout"] == 12.5
+    assert (env_out_dir / "report.md").exists()
+
+    explicit_out_dir = tmp_path / "explicit-out"
+    result = runner.invoke(
+        cli,
+        [
+            "run",
+            "--api-url",
+            "http://api.explicit",
+            "--input-json",
+            "samples/request.example.json",
+            "--out",
+            str(explicit_out_dir),
+        ],
+        env={
+            "EARNINGS_DEBATE_API_URL": "http://api.env",
+            "EARNINGS_DEBATE_OUTPUT_DIR": str(env_out_dir),
+            "EARNINGS_DEBATE_API_REQUEST_TIMEOUT_SECONDS": "15",
+        },
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["url"] == "http://api.explicit/reviews"
+    assert captured["timeout"] == 15.0
+    assert (explicit_out_dir / "report.md").exists()
+
+
+def test_cli_serve_uses_env_host_and_port_defaults(monkeypatch):
+    captured = {}
+
+    def fake_run(app, host, port, reload):
+        captured["app"] = app
+        captured["host"] = host
+        captured["port"] = port
+        captured["reload"] = reload
+
+    monkeypatch.setattr("uvicorn.run", fake_run)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["serve"],
+        env={
+            "EARNINGS_DEBATE_API_HOST": "0.0.0.0",
+            "EARNINGS_DEBATE_API_PORT": "9000",
+        },
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured == {
+        "app": "src.api:app",
+        "host": "0.0.0.0",
+        "port": 9000,
+        "reload": False,
+    }
