@@ -1,162 +1,303 @@
-# Earnings Review System Details
+# Earnings Review System Guide
 
-この文書は Earnings Debate Agent のシステム面を説明する README 派生ドキュメントです。
-動機、設計思想、開発背景は README 側の担当範囲とし、ここでは実装から確認できる処理責務、入出力契約、検証観点、運用設定だけを扱います。
+この文書は Earnings Debate Agent のシステム説明、実行方法、設定項目、検証方法をまとめた外部向けガイドです。README では開発動機と設計思想を説明し、この文書では実装上の処理責務と使い方を説明します。
 
-## 1. System Boundary
+## 1. Overview
 
-### 観測事実
+Earnings Debate Agent は、四半期決算を対象にした固定ワークフロー型のマルチエージェントシステムです。LLM に自由な調査手順を任せるのではなく、Python 側で入力正規化、context routing、専門エージェント、Bull/Bear debate、Judge、Markdown rendering、quality gates を明示的に制御します。
 
-- API の実行境界は `POST /reviews` です。`src/api.py` は request body を `NormalizedReviewRequest` として検証し、成功時は `ReviewSuccessResponse`、dry-run 時は `ReviewDryRunResponse`、失敗時は `ReviewErrorResponse` 系の envelope を返します。
-- `NormalizedReviewRequest` は `src/workflow_models.py` で定義され、`schema_version`、`request_id`、`ticker`、`fiscal_period`、`financial_metrics`、`document_sections`、`source_manifest`、`context_budget`、`include_markdown`、`purpose`、`is_investment_advice`、`dry_run` を持ちます。
-- API 入力では raw acquisition fields が拒否されます。`NormalizedReviewRequest.reject_raw_fields()` が `filing_url`、`raw_text`、`document_files` などの取得用 field を normalized API contract から切り離しています。
-- CLI は raw/local input を扱えます。`src/main.py` の `earnings-debate run` は `src/preprocessor.py` の `build_normalized_review_request()` を通じて sample JSON、local file、raw text、filing URL などを正規化し、API または local fake provider 実行に渡します。
-- 最終レスポンスと Markdown は `purpose="earnings_review_not_investment_advice"`、`is_investment_advice=False`、disclaimer を持つ契約です。
+主な出力は次の2つです。
 
-### 推論
+- `workflow_result.json`: API response と同等の構造化結果
+- `report.md`: 人間が読むための決算レビュー Markdown
 
-この境界により、API は「取得と正規化が完了した payload の検証と workflow 実行」に集中し、raw document acquisition は CLI/preprocessor 側へ寄せられています。運用上は、外部取得処理を変更しても API の normalized contract を保てることが重要です。
+このシステムの目的は、投資判断を代替することではありません。EPS、FCF、guidance、management comment、Bull/Bear の論点を source-backed に整理し、人間がレビューできる決算分析 artifact を作ることに範囲を限定しています。
 
-## 2. Workflow Overview
+## 2. What It Does And Does Not Do
 
-### 観測事実
+### Does
 
-中核の同期 workflow は `src/workflow.py` の `ReviewWorkflow.run()` です。処理順序は固定されています。
+- 決算レビュー用の入力を `NormalizedReviewRequest` に正規化する
+- 財務指標、文書 section、source manifest を紐づける
+- 役割別に context を分けて専門エージェントへ渡す
+- Bull case と Bear case を作り、Judge が `good` / `neutral` / `bad` を判定する
+- source ref、evidence、claim、decision use を検証する
+- Markdown report を deterministic renderer で生成する
+- fake LLM provider により、API key なしで主要な CLI/CI smoke を実行できる
 
-1. `data_ingestion`
-2. `financial_agents`
-3. `presentation_agents`
-4. `evidence_aggregation`
-5. `debate`
-6. `judge`
-7. `markdown_renderer`
+### Does Not Do
 
-各 step は `StepStatus` として記録され、失敗時は該当 step に error が残る構造です。LLM 呼び出しは agent runtime と debate/judge runner に閉じ込められ、最終 Markdown は renderer が決定的に生成します。
+- 投資助言
+- 売買推奨
+- 目標株価や株価予測
+- 自動売買
+- portfolio optimization
+- DCF などの valuation model
+- source-backed でない news、web、analyst 情報を主 verdict に混ぜること
+- LLM に raw 財務表から未検証の計算を任せること
 
-### 推論
+## 3. Repository Surfaces
 
-この workflow は LLM に手順選択を任せる agentic loop ではありません。Python 側が順序、入力契約、source scope、validation gate、Markdown rendering を管理し、LLM は役割別の構造化分析を返す部品として使われます。
+提出用の主要ファイルは次の通りです。
 
-## 3. Data Processor / Normalization
+| Path | Role |
+|---|---|
+| `src/main.py` | CLI entrypoint。`serve` と `run` を提供する |
+| `src/api.py` | FastAPI app。`POST /reviews` を提供する |
+| `src/preprocessor.py` | raw/local input を normalized request に変換する |
+| `src/workflow.py` | 固定順序の決算レビュー workflow |
+| `src/context_router.py` | role 別 context routing と budget check |
+| `src/workflow_agents.py` | 7つの LLM agent wrapper と出力 schema validation |
+| `src/workflow_runtime.py` | specialist/debate/judge agent の実行制御 |
+| `src/workflow_validation.py` | evidence pool、source、polarity、safety の validation |
+| `src/report_renderer.py` | Markdown report の deterministic rendering |
+| `src/workflow_models.py` | API、workflow、report の Pydantic contract |
+| `src/prompts/` | role 別 prompt と shared policy |
+| `samples/` | 現行仕様の normalized request samples |
+| `outputs/` | 現行仕様の sample report artifacts |
+| `.env.example` | 環境変数テンプレート |
+| `Makefile` | local check と test entrypoint |
 
-### 観測事実
+## 4. Quick Start
 
-`src/preprocessor.py` の `build_normalized_review_request()` は CLI/local payload を `NormalizedReviewRequest` に変換します。
+### 4.1 Install
 
-対応する入力面は次の通りです。
+```bash
+uv sync --frozen --group dev
+```
 
-- すでに normalized された payload
+### 4.2 Run Without A Real LLM
+
+fake provider を使うと、API key なしで workflow の入口、schema、routing、renderer を確認できます。
+
+```bash
+PYTHON_DOTENV_DISABLED=1 \
+LLM_PROVIDER=fake \
+LOG_LEVEL=WARNING \
+uv run earnings-debate run \
+  --api-url local \
+  --input-json samples/request.nvda-2027q1.example.json \
+  --out /tmp/earnings-nvda-demo
+```
+
+ZS の sample も同じ形で実行できます。
+
+```bash
+PYTHON_DOTENV_DISABLED=1 \
+LLM_PROVIDER=fake \
+LOG_LEVEL=WARNING \
+uv run earnings-debate run \
+  --api-url local \
+  --input-json samples/request.zs-2026q3.example.json \
+  --out /tmp/earnings-zs-demo
+```
+
+生成される artifact は次の2つです。
+
+```text
+/tmp/earnings-nvda-demo/workflow_result.json
+/tmp/earnings-nvda-demo/report.md
+```
+
+### 4.3 Run With A Real LLM
+
+実 LLM を使う場合は、provider と API key を環境変数で設定します。
+
+```bash
+cp .env.example .env
+```
+
+Anthropic を使う例:
+
+```bash
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=...
+ANTHROPIC_MODEL=claude-sonnet-4-5
+```
+
+OpenAI を使う例:
+
+```bash
+LLM_PROVIDER=openai
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-5.4-mini
+```
+
+実 LLM 実行では token 使用量、API費用、provider の rate limit が発生します。提出確認やCIでは `LLM_PROVIDER=fake` を使うのが基本です。
+
+### 4.4 Start The API Server
+
+```bash
+uv run earnings-debate serve --host 127.0.0.1 --port 8000
+```
+
+CLI から API server へ投げる場合:
+
+```bash
+uv run earnings-debate run \
+  --api-url http://127.0.0.1:8000 \
+  --input-json samples/request.nvda-2027q1.example.json \
+  --out outputs/local-run
+```
+
+### 4.5 CLI Help
+
+```bash
+uv run earnings-debate --help
+uv run earnings-debate run --help
+uv run earnings-debate serve --help
+```
+
+`earnings-debate run` の主な入力 option は次の通りです。
+
+| Option | Description |
+|---|---|
+| `--input-json PATH` | sample または normalized/local payload を読み込む |
+| `--api-url TEXT` | API URL。`local` を指定すると network POST ではなく local workflow を実行する |
+| `--ticker TEXT` | `--input-json` なしで使う ticker |
+| `--fiscal-period`, `--quarter` | `2026Q3` のような fiscal period |
+| `--filing-url TEXT` | SEC filing URL から正規化する |
+| `--local-path FILE` | local PDF/text/Markdown を document section 化する。複数回指定できる |
+| `--raw-text TEXT` | raw text を document section 化する |
+| `--out PATH` | `workflow_result.json` と `report.md` の出力先 |
+
+## 5. Canonical Samples And Outputs
+
+現行仕様の sample request は2本です。どちらも外部取得なしで `NormalizedReviewRequest` として使えます。
+
+| Sample | Output artifact | Target |
+|---|---|---|
+| `samples/request.nvda-2027q1.example.json` | `outputs/sample-nvda-20260607/` | NVDA 2027Q1 |
+| `samples/request.zs-2026q3.example.json` | `outputs/sample-zs-20260607/` | ZS 2026Q3 |
+
+これらの sample は `schema_version`、`financial_metrics`、`document_sections`、`source_manifest`、`context_budget` を含む normalized request です。そのため、SEC や yfinance への外部取得を行わずに workflow contract を確認できます。
+
+## 6. System Architecture
+
+固定 workflow は次の順序で実行されます。
+
+```text
+CLI / API
+  -> input normalization
+  -> data ingestion
+  -> context routing
+  -> financial specialist agents
+  -> presentation specialist agents
+  -> evidence aggregation
+  -> Bull / Bear debate
+  -> Judge
+  -> deterministic Markdown rendering
+```
+
+中核は `src/workflow.py` の `ReviewWorkflow.run()` です。各 step は `StepStatus` として記録され、失敗時は該当 step の error string が残ります。API response の error category は `src/api.py` の error envelope 側で付与されます。
+
+quality gate は独立した workflow step ではありません。input validation、source manifest validation、context budget check、evidence aggregation、debate/judge selection、report matrix validation の各段階に分散しています。
+
+## 7. Input Contract
+
+API の実行境界は `POST /reviews` です。API は `NormalizedReviewRequest` を受け取ります。
+
+主要 field:
+
+| Field | Role |
+|---|---|
+| `schema_version` | normalized request の schema version |
+| `request_id` | trace 用 ID |
+| `ticker` | 対象 ticker |
+| `fiscal_period` | 対象四半期 |
+| `financial_metrics` | 正規化済み財務指標 |
+| `document_sections` | source ref 付き文書 section |
+| `source_manifest` | request 内で参照できる source の登録表 |
+| `context_budget` | role context の token budget |
+| `include_markdown` | Markdown report を含めるか |
+| `purpose` | `earnings_review_not_investment_advice` 固定 |
+| `is_investment_advice` | `false` 固定 |
+| `dry_run` | provider/workflow を呼ばず contract を検査する |
+
+API は raw acquisition fields を受け付けません。`filing_url`、`document_files`、`raw_text`、`local_path` などは CLI/preprocessor 側の入力です。API に直接渡す payload は、取得と正規化が完了している必要があります。
+
+## 8. Data Processing
+
+`src/preprocessor.py` は CLI/local payload を normalized request に変換します。
+
+対応する入力形態:
+
+- normalized JSON
 - `document_sections`
 - `document_files`
 - `local_path`
 - `raw_text`
 - `filing_url`
-- ticker / fiscal period などの最小実行情報
+- ticker / fiscal period
 
-文書入力は `DocumentSection` に変換され、各 section には `SourceRef` が付きます。`fetch_filing_html()` は SEC filing HTML を取得し、`segment_filing()` が filing text を topic section に分割します。PDF/text/Markdown などの local file は `document_files_to_sections()` 側で section 化されます。
+文書入力は `DocumentSection` に変換され、各 section に `SourceRef` が付きます。local file は text layer を前提に section 化されます。SEC filing は HTML を取得し、topic section に分割します。
 
-財務データは `FinancialMetrics` として正規化されます。yfinance 由来の EPS / revenue / cash flow 系 metric と、SEC Company Facts 由来の revenue / operating cash flow / capex を統合し、Python 側で canonical metrics、derived metrics、availability、metric conflict を構築します。FCF などの派生値も Python 側で扱われ、LLM が raw 財務表から直接計算する設計ではありません。
+財務指標は `FinancialMetrics` に正規化されます。対象は EPS、revenue、operating cash flow、capex、free cash flow、guidance などです。free cash flow のような派生値は Python 側で計算・登録し、LLM が raw 表から自由に計算する設計にはしていません。
 
-### 推論
+## 9. Context Routing
 
-Data processor の責務は「取得済みまたは取得可能な入力を、source traceable な normalized contract に揃えること」です。LLM の自由記述に任せる前に、数値、期間、source、availability を構造化することで、後段 gate と renderer が検証可能になります。
+`src/context_router.py` の `ContextRouter` は、全データをすべての specialist agent に渡さず、役割ごとに必要な context へ絞ります。実行時に `source_manifest` と `context_budget` がある場合、主に4つの specialist role に対して routed context と source index を作ります。
 
-## 4. Context Routing
+| Role | Routed Context |
+|---|---|
+| `EarningsQualityAnalyst` | EPS、revenue、margin、一時要因、earnings quality sections |
+| `CashFlowRiskAnalyst` | operating cash flow、FCF、capex、working capital、liquidity、debt |
+| `ManagementIntentAnalyst` | management、strategy、MD&A、risk、capital allocation sections |
+| `GuidanceAnalyst` | guidance metrics、consensus deltas、guidance/outlook sections |
+Bull/Bear/Judge の context は `src/workflow_runtime.py` 側で `AnalysisBrief` と候補 evidence pool から組み立てます。Bear は Bull summary を受け取るため、debate stage は完全並列ではありません。
 
-### 観測事実
+Router は次を検証します。
 
-`src/context_router.py` の `ContextRouter` は `NormalizedReviewRequest` から role 別 context を作ります。`ROLE_CONTEXT_KEYS` は role ごとに渡せる key を固定しています。
+- routed context が request の `source_manifest` 外の source を参照していないこと
+- `source_ref` と `source_manifest` の locator が矛盾しないこと
+- role context が `context_budget` に収まること
 
-- `EarningsQualityAnalyst`: EPS / P&L / revenue / margin / one-time items などの earnings quality context
-- `CashFlowRiskAnalyst`: operating cash flow / FCF / capex / working capital / liquidity / debt などの cash-flow risk context
-- `ManagementIntentAnalyst`: management / strategy / MD&A / risk / capital allocation などの management context
-- `GuidanceAnalyst`: guidance metrics / consensus deltas / guidance sections / assumptions / track record などの guidance context
-- `BullAgent`: validated brief と positive/negative evidence pool
-- `BearAgent`: validated brief、Bull summary、positive/negative evidence pool
-- `JudgeAgent`: validated brief、Bull/Bear case、evidence pool
+token count は provider tokenizer ではなく、stable compact JSON の文字数を4で割る deterministic approximation です。これは実行前 gate とテスト再現性を優先した設計です。
 
-Router は `source_manifest` と各 `source_ref` の整合性を検証します。role context には source scope に応じた `source_index` が付きます。さらに stable compact JSON の文字数を 4 で割る概算 token counter を使い、`context_budget.max_input_tokens` と `max_total_tokens` を LLM 呼び出し前に検証します。
+## 10. Agent Responsibilities
 
-### 推論
+runtime agent は7つです。
 
-Context routing は「全情報を全 agent に渡す」設計ではなく、role ごとに必要な context と source index を絞る設計です。これにより、役割境界、source traceability、context budget gate を同時に満たします。
+| Agent | Responsibility |
+|---|---|
+| `EarningsQualityAnalyst` | EPS surprise、P&L quality、revenue quality、margin trend、一時要因と継続要因を分析する |
+| `CashFlowRiskAnalyst` | operating cash flow、FCF、capex、working capital、liquidity、financing risk を分析する |
+| `ManagementIntentAnalyst` | 経営陣の意図、投資優先順位、成長投資、株主還元、実行リスクを分析する |
+| `GuidanceAnalyst` | guidance、consensusとの差分、前提、達成可能性、revision risk を分析する |
+| `BullAgent` | validated evidence から positive case を構成する |
+| `BearAgent` | validated evidence から downside/risk case を構成する |
+| `JudgeAgent` | Bull/Bear を比較し、最終 verdict と rationale を返す |
 
-## 5. Agent Set And Responsibilities
+各 agent は `AgentSpec` を持ち、role、出力 model、context keys、prompt、token cap、temperature を定義します。LLM の出力は JSON として parse され、Pydantic model で検証されます。role mismatch や schema mismatch は workflow error として扱われます。
 
-### 観測事実
+## 11. Evidence And Quality Gates
 
-runtime agent は次の 7 つです。名前は `src/workflow_agents.py` と `tests/test_workflow_e2e.py` で確認できます。
+このシステムでは、LLM の出力をそのまま最終判定に使いません。`src/workflow_validation.py` と `src/workflow_models.py` の contract で、source、evidence、claim、decision use を検証します。
 
-| Agent | 主な責務 | 主な入力 |
-|---|---|---|
-| `EarningsQualityAnalyst` | EPS surprise と P&L の質、売上品質、margin trend、一時要因/継続要因、将来 EPS への示唆を分析する | earnings quality metrics / sections |
-| `CashFlowRiskAnalyst` | CFO、FCF、CapEx、working capital、liquidity、debt、financing constraint を統合し、将来 FCF 改善方向とリスクを分析する | cash flow / balance sheet / risk context |
-| `ManagementIntentAnalyst` | 経営陣の意図、優先順位、投資判断、EPS/FCF への時間軸別示唆を分析する | management / strategy / MD&A / risk sections |
-| `GuidanceAnalyst` | guidance、precomputed consensus 差分、前提、達成可能性、revision risk を分析する | guidance metrics / consensus deltas / guidance sections |
-| `BullAgent` | validated `AnalysisBrief` だけから positive case を作る | brief と validated evidence pool |
-| `BearAgent` | validated `AnalysisBrief` と必要に応じて Bull summary から downside/neutral case を作る | brief、Bull summary、validated evidence pool |
-| `JudgeAgent` | Bull/Bear を比較し `good` / `neutral` / `bad` を判定する | brief、Bull/Bear case、validated evidence pool |
+主な gate:
 
-各 agent は `AgentSpec` を持ち、public role、出力 model、context keys、system prompt、task prompt、token cap、temperature を定義します。`WorkflowAgent.run()` は LLM 出力を JSON として parse し、Pydantic model で検証します。role mismatch や schema mismatch は workflow error として扱われ、repair retry の対象になる場合があります。
+| Gate | Purpose |
+|---|---|
+| Normalized input contract | API input が `NormalizedReviewRequest` として妥当か確認する |
+| Raw acquisition rejection | API に raw取得用 field が混ざることを防ぐ |
+| Source manifest consistency | evidence や metric が未登録 source を参照しないようにする |
+| Context budget | LLM 呼び出し前に context size を確認する |
+| Guidance acquisition | guidance/outlook source または no-guidance disclosure があるか確認する |
+| Numeric grounding | material claim に数値根拠または missing-data caveat があるか確認する |
+| Evidence pool validation | Bull/Bear/Judge が validated candidate pool 外の evidence を使わないようにする |
+| Missing-data confidence cap | 必要データ不足時に Judge confidence を制限する |
+| Investment-advice language guard | 投資助言表現を warning/redaction 対象にする |
+| ReportMatrix validation | source、evidence、claim、decision use の参照整合性を確認する |
 
-### 推論
+`EARNINGS_DEBATE_REQUIRE_GUIDANCE` は workflow の guidance acquisition gate に使われます。`EARNINGS_DEBATE_REQUIRE_NUMERIC_GROUNDING` は numeric grounding validator の切り分け用設定です。通常はどちらも有効のまま扱います。
 
-Specialist agent は一次分析を作り、Bull/Bear/Judge は検証済み brief と evidence pool だけを使う後段 role です。この分離により、討論・判定段階で raw source を読み直して未検証の根拠を増やす動きを抑えています。
+report の `Quality Gates: passed` は、ReportMatrix の参照整合性など workflow 内部の検証が通ったことを示します。投資リスクがないことや、外部データが完全であることを保証するものではありません。
 
-## 6. Evidence Validation
+## 12. Report Output
 
-### 観測事実
+Markdown report は `src/report_renderer.py` の `ReportRenderer` が生成します。LLM が Markdown を直接書くのではなく、validated structured output から固定順の section を組み立てます。
 
-`src/workflow_validation.py` の `WorkflowValidationGate.aggregate_evidence()` は specialist findings から positive / negative evidence pool を作ります。空の positive pool または negative pool は workflow validation error です。
-
-主な validation は次の通りです。
-
-- evidence の `source_ref` が request の canonical source set と整合すること
-- 同じ source を参照する evidence は canonical source ref に寄せること
-- material claim が numeric grounding か明示的な missing-data caveat を持つこと
-- grounding されていない material evidence は、代替根拠が残る場合 Judge candidate pool から除外すること
-- Bull/Bear/Judge が選ぶ evidence id は validated `AnalysisBrief` 内の候補に存在すること
-- Judge の positive evidence は positive polarity、negative evidence は negative/risk polarity であること
-- investment-advice language は warning 化し、deterministic rendering 前に redaction すること
-
-`ReportMatrix` は `src/workflow_models.py` で、`source_manifest`、`evidence_items`、`claim_records`、`decision_uses`、`missing_data_items`、`data_quality_flags` を持ちます。model validator は duplicate evidence id、unregistered source ref、unregistered evidence id、decision use と claim/evidence の不整合を拒否します。
-
-### 推論
-
-Evidence validation は LLM 出力の「もっともらしい文章」をそのまま判定材料にせず、source ref、polarity、numeric grounding、候補 pool への所属を deterministic に確認する gate です。
-
-## 7. Quality Gates
-
-### 観測事実
-
-この system で確認できる主な gate は次の通りです。
-
-| Gate | 実装面 | 失敗時の扱い |
-|---|---|---|
-| Normalized input contract | `NormalizedReviewRequest` validation | API 422 envelope |
-| Raw acquisition field rejection | `reject_raw_fields()` | API 422 envelope |
-| Runtime required input | `_runtime_required_input_error()` | API 422 envelope |
-| Source manifest consistency | `ContextRouter` / model validators / `WorkflowValidationGate` | API 422 または workflow validation error |
-| Context budget | `ContextRouter.check_budget()` | LLM 呼び出し前に 422 |
-| Guidance acquisition | `report_quality_guidance.validate_guidance_required()` | guidance source 不足を検出 |
-| Numeric grounding | `report_quality_numeric_grounding` と evidence degradation | warning または candidate pool 除外 |
-| Missing-data confidence cap | `report_quality_missing_data.apply_confidence_caps()` | Judge confidence を上限で cap |
-| Investment-advice language | `WorkflowValidationGate.investment_advice_warnings()` | warning + redaction |
-| ReportMatrix reference validation | `ReportMatrix.validate_references()` | model validation error |
-
-Guidance gate と numeric grounding gate は環境変数で legacy test 用に無効化できる実装がありますが、既定は有効です。`.env` の実値はこの調査では読まず、`.env.example` にある公開テンプレートだけを参照しています。
-
-### 推論
-
-Gate は「投資判断を自動化するため」ではなく、「source-backed な決算分析 artifact として破綻しないため」の防御線です。特に missing-data confidence cap は、必要な canonical data が欠ける場合に判定の強さを制約します。
-
-## 8. Report Rendering
-
-### 観測事実
-
-最終 Markdown は `src/report_renderer.py` の `ReportRenderer` が生成します。LLM が Markdown report を直接書くのではなく、validated `AnalysisBrief`、`DebateResult`、`JudgeDecision`、`ReportMatrix` から固定順の section を組み立てます。
-
-現在の section order は次の通りです。
+主な section:
 
 1. `レポート前提: canonical data`
 2. `要約`
@@ -171,125 +312,140 @@ Gate は「投資判断を自動化するため」ではなく、「source-backe
 11. `ソース付録 (Source Appendix)`
 12. `免責事項`
 
-Report は canonical metrics table、Judge rationale、Bull/Bear 論点、agent contribution、claim/evidence matrix、data quality flags、source appendix、disclaimer を含みます。`tests/test_workflow_e2e.py`、`tests/test_api_smoke.py`、`tests/test_cli_smoke.py` は主要 section が出力されることを検証しています。
+report section の追加や削除は output contract の変更として扱います。
 
-### 推論
+## 13. Configuration / Environment Variables
 
-Renderer は LLM 生成文の最終整形ではなく、検証済み構造化データを人間が読める報告書へ変換する deterministic layer です。そのため、report section の追加・削除は output contract 変更として扱う必要があります。
+設定は `.env.example` に集約しています。`.env` の実値や secret は repository に含めません。
 
-## 9. CLI
+### Provider And Model
 
-### 観測事実
+| Env var | Default in `.env.example` | Description |
+|---|---:|---|
+| `LLM_PROVIDER` | `anthropic` | `fake`、`anthropic`、`openai` を選択する |
+| `ANTHROPIC_API_KEY` | empty | Anthropic API key |
+| `OPENAI_API_KEY` | empty | OpenAI API key |
+| `ANTHROPIC_MODEL` | `claude-sonnet-4-5` | Anthropic model |
+| `OPENAI_MODEL` | `gpt-5.4-mini` | OpenAI model |
 
-CLI entrypoint は `pyproject.toml` の `earnings-debate = "src.main:cli"` です。`src/main.py` は Click command として `serve` と `run` を提供します。
+`LLM_PROVIDER=fake` は CI/smoke 用です。実 provider の品質や費用を検証するものではありません。
 
-- `earnings-debate serve`: FastAPI app を uvicorn で起動します。
-- `earnings-debate run`: input JSON、ticker/fiscal period、filing URL、local file、raw text などを受け取り、normalized payload を作って `POST /reviews` へ送ります。
-- `--api-url local`、または `LLM_PROVIDER=fake` かつ default local API URL の場合、CLI は network POST ではなく local `ReviewWorkflow(get_provider()).run()` を実行します。
-- 出力 artifact は `workflow_result.json` と `report.md` です。
+### CLI / API Defaults
 
-`tests/test_cli_smoke.py` は fake provider を使って CLI が report と workflow result を書くこと、raw acquisition fields を API mode の payload に残さないことを検証しています。
+| Env var | Default | Description |
+|---|---:|---|
+| `EARNINGS_DEBATE_API_HOST` | `127.0.0.1` | `serve` の host default |
+| `EARNINGS_DEBATE_API_PORT` | `8000` | `serve` の port default |
+| `EARNINGS_DEBATE_API_URL` | `http://127.0.0.1:8000` | `run` の API URL default |
+| `EARNINGS_DEBATE_OUTPUT_DIR` | `outputs` | CLI output directory default |
+| `EARNINGS_DEBATE_API_REQUEST_TIMEOUT_SECONDS` | `300` | API POST timeout |
+| `LOG_LEVEL` | `INFO` | CLI logging level |
 
-### 推論
+CLI の明示 option は environment default より優先されます。
 
-CLI は API-first workflow の薄い adapter です。運用上は「local acquisition と normalized API contract の橋渡し」として理解すると、API 側へ raw source handling を混ぜずに済みます。
+### LLM Runtime
 
-## 10. API
+| Env var | Default | Description |
+|---|---:|---|
+| `EARNINGS_DEBATE_LLM_DEFAULT_MAX_TOKENS` | `2048` | provider direct call の default max tokens |
+| `EARNINGS_DEBATE_LLM_DEFAULT_TEMPERATURE` | `0.7` | provider direct call の default temperature |
+| `EARNINGS_DEBATE_OPENAI_MIN_COMPLETION_TOKENS` | `4096` | OpenAI completion token floor |
+| `EARNINGS_DEBATE_AGENT_MAX_TOKENS` | `8192` | specialist agent max tokens |
+| `EARNINGS_DEBATE_DEBATE_MAX_TOKENS` | `8192` | Bull/Bear max tokens |
+| `EARNINGS_DEBATE_JUDGE_MAX_TOKENS` | `12000` | Judge max tokens |
+| `EARNINGS_DEBATE_AGENT_TEMPERATURE` | `0.2` | specialist/debate temperature |
+| `EARNINGS_DEBATE_JUDGE_TEMPERATURE` | `0.1` | Judge temperature |
+| `EARNINGS_DEBATE_AGENT_MAX_RETRIES` | `1` | agent schema repair retry |
+| `EARNINGS_DEBATE_AGENT_MAX_WORKERS` | empty | specialist parallel worker cap。empty は runtime default |
+| `EARNINGS_DEBATE_DEBATE_SELECTION_ATTEMPTS` | `2` | debate evidence selection attempts |
+| `EARNINGS_DEBATE_JUDGE_SELECTION_ATTEMPTS` | `2` | judge evidence selection attempts |
 
-### 観測事実
+### Acquisition / Cache
 
-FastAPI app は `src/api.py` の `app = FastAPI(title="Earnings Debate Agent API")` です。主要 endpoint は `POST /reviews` です。
+| Env var | Default | Description |
+|---|---:|---|
+| `SEC_USER_AGENT` | placeholder | SEC EDGAR request user-agent |
+| `EARNINGS_DEBATE_SEC_REQUEST_TIMEOUT_SECONDS` | `30` | SEC request timeout |
+| `EARNINGS_DEBATE_SEC_FILING_CACHE_DIR` | `samples/cache` | SEC filing cache directory |
+| `EARNINGS_DEBATE_SEC_CACHE_KEY_LENGTH` | `12` | cache key length |
+| `EARNINGS_DEBATE_MAX_DOCUMENT_SECTION_CHARS` | `8000` | document section chunk size |
 
-通常実行の流れ:
+SEC EDGAR へアクセスする場合は、識別可能な `SEC_USER_AGENT` を設定してください。
 
-1. body が JSON object であることを確認
-2. `NormalizedReviewRequest` として validation
-3. `dry_run=false` の場合、runtime required input と context budget を preflight
-4. `ReviewWorkflow` を解決し、legacy `ReviewRequest` へ bridge
-5. workflow 実行結果から `ReviewSuccessResponse` を構築
+### Quality Gates
 
-dry-run の流れ:
+| Env var | Default | Description |
+|---|---:|---|
+| `EARNINGS_DEBATE_REQUIRE_GUIDANCE` | `1` | guidance acquisition gate |
+| `EARNINGS_DEBATE_REQUIRE_NUMERIC_GROUNDING` | `1` | numeric grounding validator |
 
-1. normalized contract check
-2. source manifest check
-3. runtime required input check
-4. context budget check
-5. provider/workflow を解決せずに `ReviewDryRunResponse` を返す
+通常はどちらも有効のまま使います。無効化は legacy fixture や一時的な切り分け用途に限定します。
 
-`tests/test_api_contract.py` は dry-run が external fetch や workflow provider 解決を行わないこと、context budget failure が workflow 前に発生すること、quality-gate failure が 422 envelope になることを検証しています。
+## 14. API Usage
 
-### 推論
+API server を起動します。API mode で実 LLM を使う場合、provider と API key は server process 側の環境変数で決まります。
 
-dry-run は「LLM と外部 provider に到達する前の契約検査」です。CI や integration では、payload の schema/source/context 問題を早期に切り分ける用途に向いています。
+```bash
+uv run earnings-debate serve --host 127.0.0.1 --port 8000
+```
 
-## 11. CI And Test Gates
+別 terminal から normalized sample を送ります。
 
-### 観測事実
+```bash
+curl -sS http://127.0.0.1:8000/reviews \
+  -H 'content-type: application/json' \
+  --data @samples/request.nvda-2027q1.example.json \
+  > /tmp/earnings-review-response.json
+```
 
-`Makefile` は次の主要 target を提供します。
+`dry_run=true` の payload では、provider/workflow を解決せずに input contract、source manifest、runtime required input、context budget を検査します。実行前に payload の構造だけ確認したい場合に使えます。
 
-- `make test`: `uv run pytest`
-- `make test-fast`: API smoke、CLI smoke、fake workflow e2e の focused smoke
-- `make check`: format check、lint、typecheck、pytest
-- `make check-required`: `make check` の alias
+```bash
+jq '.dry_run = true' samples/request.nvda-2027q1.example.json \
+  | curl -sS http://127.0.0.1:8000/reviews \
+      -H 'content-type: application/json' \
+      --data-binary @-
+```
 
-`pyproject.toml` は pytest の `testpaths = ["tests"]`、ruff、mypy、dependency を定義します。`.github/workflows/ci.yml` は Ubuntu runner で uv を準備し、`make check` を実行します。
+## 15. Tests And CI
 
-テストは外部 API key に依存しない形を持ちます。`tests/test_workflow_e2e.py` は `LLM_PROVIDER=fake` と `FakeProvider` で 7 agent workflow を API key なしに実行します。API/CLI/preprocessor 系テストは `monkeypatch` で fetch や provider を差し替える箇所があります。
+主な Makefile target:
 
-### 推論
+| Command | Description |
+|---|---|
+| `make sync` | locked dev dependencies を install |
+| `make format-check` | Ruff formatting check |
+| `make lint` | Ruff lint |
+| `make typecheck` | mypy |
+| `make test` | pytest |
+| `make test-fast` | API smoke、CLI smoke、workflow e2e |
+| `make check` | format、lint、typecheck、pytest |
 
-通常の system 変更では、まず最小の対象 pytest を実行し、shared contract や output surface を触る場合に `make check` へ広げるのが妥当です。
+CI は `.github/workflows/ci.yml` で `make check` を実行します。テストは実 API key に依存しないよう、fake provider と monkeypatch を使います。
 
-## 12. Configuration / Environment Variables
+提出前の基本確認:
 
-### 観測事実
+```bash
+make check
+```
 
-公開テンプレート `.env.example` と `src/runtime_config.py` / `src/llm.py` / `src/main.py` / `src/preprocessor.py` / `src/workflow_agents.py` / `src/workflow_runtime.py` から確認できる主要設定面は次の通りです。
+CLI smoke を手元で見る場合:
 
-| Surface | Env var | 用途 |
-|---|---|---|
-| LLM provider | `LLM_PROVIDER` | `fake` / `anthropic` / `openai` の provider 選択 |
-| Anthropic auth/model | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Anthropic SDK が env から key を読み、model を選択 |
-| OpenAI auth/model | `OPENAI_API_KEY`, `OPENAI_MODEL` | OpenAI SDK が env から key を読み、model を選択 |
-| SEC access | `SEC_USER_AGENT` | SEC EDGAR request の user-agent |
-| Logging | `LOG_LEVEL` | CLI logging level |
-| CLI/API local defaults | `EARNINGS_DEBATE_API_HOST`, `EARNINGS_DEBATE_API_PORT`, `EARNINGS_DEBATE_API_URL`, `EARNINGS_DEBATE_OUTPUT_DIR`, `EARNINGS_DEBATE_API_REQUEST_TIMEOUT_SECONDS` | local server / CLI POST / output artifact の既定値 |
-| LLM call defaults | `EARNINGS_DEBATE_LLM_DEFAULT_MAX_TOKENS`, `EARNINGS_DEBATE_LLM_DEFAULT_TEMPERATURE`, `EARNINGS_DEBATE_OPENAI_MIN_COMPLETION_TOKENS` | provider direct call と OpenAI completion token floor |
-| Agent/runtime tunables | `EARNINGS_DEBATE_AGENT_MAX_TOKENS`, `EARNINGS_DEBATE_DEBATE_MAX_TOKENS`, `EARNINGS_DEBATE_JUDGE_MAX_TOKENS`, `EARNINGS_DEBATE_AGENT_TEMPERATURE`, `EARNINGS_DEBATE_JUDGE_TEMPERATURE`, `EARNINGS_DEBATE_AGENT_MAX_RETRIES`, `EARNINGS_DEBATE_AGENT_MAX_WORKERS`, `EARNINGS_DEBATE_DEBATE_SELECTION_ATTEMPTS`, `EARNINGS_DEBATE_JUDGE_SELECTION_ATTEMPTS` | agent 出力長、temperature、retry、並列数、selection retry |
-| Acquisition/network/cache | `EARNINGS_DEBATE_SEC_REQUEST_TIMEOUT_SECONDS`, `EARNINGS_DEBATE_SEC_FILING_CACHE_DIR`, `EARNINGS_DEBATE_SEC_CACHE_KEY_LENGTH`, `EARNINGS_DEBATE_MAX_DOCUMENT_SECTION_CHARS` | SEC request timeout、filing cache、document section chunk cap |
-| Quality gates | `EARNINGS_DEBATE_REQUIRE_GUIDANCE`, `EARNINGS_DEBATE_REQUIRE_NUMERIC_GROUNDING` | guidance / numeric grounding gate の既定有効化 |
+```bash
+PYTHON_DOTENV_DISABLED=1 \
+LLM_PROVIDER=fake \
+LOG_LEVEL=WARNING \
+uv run earnings-debate run \
+  --api-url local \
+  --input-json samples/request.nvda-2027q1.example.json \
+  --out /tmp/earnings-cli-smoke
+```
 
-`src/runtime_config.py` は unset または空文字を既存 default として扱い、不正な int / float / bool / path は `ValueError` にします。CLI の明示オプションは env default より優先されます。
+## 16. Limitations
 
-`.env` や secret-bearing file は読んでいません。secret 値は docs に書かず、`.env.example` のような空または placeholder のテンプレートだけを使います。
-
-### 推論
-
-deploy ごとに変わる provider、model、API key、SEC user-agent、logging、local URL、timeout、cache 位置、LLM token cap は環境変数で切り替える面です。一方で API schema、role 名、safety invariant、financial metric semantics、report section order は設定ではなく contract として扱う方が安全です。
-
-## 13. Limitations And Non-Goals
-
-### No-Go Scope
-
-この system は次を行いません。
-
-- 株価予測
-- 目標株価の提示
-- 売買推奨
-- 自動売買
-- portfolio optimization
-- LLM による raw 財務表からの未検証計算
-- source-backed でない外部 web/news/analyst 情報を主 verdict に混ぜること
-
-### 現在の制約
-
-- SEC filing segmentation は HTML text block と header pattern に依存します。filing format の差異には継続対応が必要です。
-- PDF は text layer 抽出が前提です。OCR 前提の scan PDF は現在の主要責務外です。
-- Token count は provider tokenizer ではなく deterministic approximate counter です。
-- yfinance と SEC Company Facts は外部 provider の schema / availability / rate limit に依存します。
-- fake provider は CI/smoke 用の deterministic fixture であり、実 provider の出力品質を保証するものではありません。
-
-### 推論
-
-この system の成果物は「決算分析のための検証可能な報告 artifact」です。投資判断を代替するものではなく、canonical data、source refs、evidence matrix、quality gate、missing-data caveat を通じて、人間がレビューできる材料を作ることに範囲を限定しています。
+- SEC filing segmentation は HTML text と heading pattern に依存します。
+- PDF は text layer 抽出が前提です。scan PDF の OCR は主要責務外です。
+- yfinance と SEC Company Facts は外部 provider の schema、availability、rate limit に依存します。
+- fake provider は workflow 再現性確認用であり、実 LLM の分析品質を保証しません。
+- approximate token count は provider tokenizer と完全一致しません。
+- verdict は source-backed な決算レビュー上の分類であり、投資判断や売買判断ではありません。
