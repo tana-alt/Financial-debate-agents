@@ -96,15 +96,15 @@ def serve(host: str, port: int, reload: bool) -> None:
 @click.option("--input-json", type=click.Path(exists=True, path_type=Path))
 @click.option("--ticker", help="Ticker used when --input-json is not supplied.")
 @click.option("--fiscal-period", "--quarter", help='Fiscal period, e.g. "2025Q3".')
-@click.option("--filing-url", help="SEC filing URL used when fixture sections are absent.")
+@click.option("--filing-url", help="SEC filing URL to fetch and normalize into sections.")
 @click.option(
     "--local-path",
     "local_paths",
     multiple=True,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="Local PDF/text document to normalize before calling the API.",
+    help="Local PDF/text/Markdown document to normalize; may be repeated.",
 )
-@click.option("--raw-text", help="Raw source text to normalize before calling the API.")
+@click.option("--raw-text", help="Inline source text to normalize into sections.")
 @click.option(
     "--out",
     "out_dir",
@@ -122,7 +122,7 @@ def run(
     raw_text: str | None,
     out_dir: Path,
 ) -> None:
-    """Call POST /reviews and save the API response artifacts."""
+    """Run a review locally or through POST /reviews and save artifacts."""
     load_dotenv()
     setup_logging()
 
